@@ -10,7 +10,7 @@ import {
 } from "@/lib/storage";
 import { Lead, PipelineStage } from "@/types";
 import { formatCurrency } from "@/lib/utils";
-import { Kanban, Layers, TrendingUp, Sparkles } from "lucide-react";
+import { Kanban, Layers, TrendingUp, Sparkles, Building2, BarChart2 } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 
 export default function PipelinePage() {
@@ -47,6 +47,7 @@ export default function PipelinePage() {
   };
 
   const totalValue = leads.reduce((acc, l) => acc + (l.dealValue || 0), 0);
+  const avgDealValue = leads.length > 0 ? Math.round(totalValue / leads.length) : 0;
   const closedCount = leads.filter((l) => l.stage === "closed").length;
 
   return (
@@ -61,20 +62,31 @@ export default function PipelinePage() {
             <span className="text-xs text-slate-500">•</span>
             <span className="text-xs text-slate-400 flex items-center gap-1">
               <Kanban className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Interactive Kanban</span>
+              <span>High-Capacity CRM Engine</span>
             </span>
           </div>
           <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight mt-1">
             Pipeline CRM & Deal Velocity
           </h2>
           <p className="text-xs sm:text-sm text-slate-400 mt-1 max-w-2xl">
-            Track opportunities across 4 deal stages. Shift stages, inspect verified executive contacts,
-            record intelligence notes, and launch tailored cold outreach.
+            Optimized for enterprise scale with full support for 1,000+ accounts. Switch between the 4-stage visual Kanban and high-density spreadsheet view with sorting, instant search, and CSV export.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="px-4 py-2 rounded-xl bg-slate-900/90 border border-slate-800 text-right">
+        {/* Aggregate KPI Summary Pills */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="px-3.5 py-2 rounded-xl bg-slate-900/90 border border-slate-800 text-right">
+            <span className="text-[10px] uppercase font-bold text-slate-400 block">
+              Active Accounts
+            </span>
+            <span className="text-sm sm:text-base font-extrabold text-white font-mono flex items-center justify-end gap-1">
+              <Building2 className="w-3.5 h-3.5 text-sky-400" />
+              <span>{leads.length}</span>
+              <span className="text-[11px] font-normal text-slate-500">/ 1,000+ cap</span>
+            </span>
+          </div>
+
+          <div className="px-3.5 py-2 rounded-xl bg-slate-900/90 border border-slate-800 text-right">
             <span className="text-[10px] uppercase font-bold text-slate-400 block">
               Active Pipeline Sum
             </span>
@@ -82,10 +94,19 @@ export default function PipelinePage() {
               {formatCurrency(totalValue)}
             </span>
           </div>
+
+          <div className="hidden sm:block px-3.5 py-2 rounded-xl bg-slate-900/90 border border-slate-800 text-right">
+            <span className="text-[10px] uppercase font-bold text-slate-400 block">
+              Avg Deal Size
+            </span>
+            <span className="text-xs sm:text-sm font-bold text-slate-300 font-mono">
+              {formatCurrency(avgDealValue)}
+            </span>
+          </div>
         </div>
       </div>
 
-      {/* Kanban Board Component */}
+      {/* Kanban & Table Board Component */}
       <KanbanBoard
         leads={leads}
         onUpdateStage={handleUpdateStage}

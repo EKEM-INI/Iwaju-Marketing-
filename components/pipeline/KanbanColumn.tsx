@@ -1,9 +1,10 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { Lead, PipelineStage, PipelineColumnDef } from "@/types";
 import { KanbanCard } from "@/components/pipeline/KanbanCard";
 import { formatCurrency } from "@/lib/utils";
+import { ChevronDown, Plus } from "lucide-react";
 
 interface KanbanColumnProps {
   column: PipelineColumnDef;
@@ -18,7 +19,11 @@ export function KanbanColumn({
   onSelectLead,
   onMoveStage,
 }: KanbanColumnProps) {
+  const [visibleCount, setVisibleCount] = useState(25);
   const totalValue = leads.reduce((sum, l) => sum + (l.dealValue || 0), 0);
+
+  const displayedLeads = leads.slice(0, visibleCount);
+  const hasMore = leads.length > visibleCount;
 
   return (
     <div className="flex flex-col rounded-2xl bg-slate-950/50 border border-slate-800/90 w-80 shrink-0 h-[calc(100vh-14rem)] min-h-[500px]">
@@ -49,14 +54,28 @@ export function KanbanColumn({
             <p className="text-xs">No prospects in this stage</p>
           </div>
         ) : (
-          leads.map((lead) => (
-            <KanbanCard
-              key={lead.id}
-              lead={lead}
-              onSelect={onSelectLead}
-              onMoveStage={onMoveStage}
-            />
-          ))
+          <>
+            {displayedLeads.map((lead) => (
+              <KanbanCard
+                key={lead.id}
+                lead={lead}
+                onSelect={onSelectLead}
+                onMoveStage={onMoveStage}
+              />
+            ))}
+
+            {hasMore && (
+              <button
+                onClick={() => setVisibleCount((prev) => prev + 25)}
+                className="w-full py-2.5 px-3 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-slate-800 text-xs text-slate-300 hover:text-white font-medium transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+              >
+                <ChevronDown className="w-3.5 h-3.5 text-emerald-400" />
+                <span>
+                  Load 25 More (Showing {visibleCount} of {leads.length})
+                </span>
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>

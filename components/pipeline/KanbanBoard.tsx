@@ -3,15 +3,28 @@
 import React, { useState } from "react";
 import { Lead, PipelineStage, PipelineColumnDef } from "@/types";
 import { KanbanColumn } from "@/components/pipeline/KanbanColumn";
+import { PipelineTableView } from "@/components/pipeline/PipelineTableView";
 import { LeadDetailModal } from "@/components/pipeline/LeadDetailModal";
-import { Search, Filter, Plus, Kanban as KanbanIcon } from "lucide-react";
+import {
+  Search,
+  Plus,
+  Kanban as KanbanIcon,
+  Table as TableIcon,
+  Sparkles,
+  Layers,
+  Download,
+} from "lucide-react";
 import Link from "next/link";
+import { generateMockLeads } from "@/lib/mock-scraper";
+import { saveLeads, getStoredLeads } from "@/lib/storage";
+import { useToast } from "@/components/ui/Toast";
 
 interface KanbanBoardProps {
   leads: Lead[];
   onUpdateStage: (leadId: string, stage: PipelineStage) => void;
   onUpdateNotes: (leadId: string, notes: string) => void;
   onDeleteLead: (leadId: string) => void;
+  onRefreshLeads?: () => void;
 }
 
 const COLUMNS: PipelineColumnDef[] = [
@@ -51,8 +64,11 @@ export function KanbanBoard({
   onUpdateNotes,
   onDeleteLead,
 }: KanbanBoardProps) {
+  const { showToast } = useToast();
+  const [viewMode, setViewMode] = useState<"kanban" | "table">("kanban");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const [isSeeding, setIsSeeding] = useState(false);
 
   const filteredLeads = leads.filter((lead) => {
     if (!searchQuery.trim()) return true;
@@ -65,47 +81,135 @@ export function KanbanBoard({
     );
   });
 
+  /**
+   * Bulk Seed generator:
+   * Enables the user/client to inject 50 high-value leads into the CRM
+   * to immediately test high-capacity scaling up to 1,000+ accounts.
+   */
+  const handleBulkSeed = (count: number = 50) => {
+    setIsSeeding(true);
+    const niches = [
+      "Real Estate Development",
+      "Corporate Commercial Law",
+      "Maritime & Deep Sea Freight",
+      "FinTech & Payments",
+      "Private Secondary Schools",
+      "Hospitality & Luxury Resorts",
+    ];
+    const locations = ["Lagos", "Abuja", "Uyo", "Port Harcourt", "London"];
+
+    const newBatch: Lead[] = [];
+    const stages: PipelineStage[] = ["new", "contacted", "meeting", "closed"];
+
+    for (let i = 0; i < count; i++) {
+      const selectedNiche = niches[i % niches.length];
+      const selectedLoc = locations[i % locations.length];
+      const lead = generateMockLeads(selectedNiche, selectedLoc, 1)[0];
+      lead.stage = stages[i % stages.length];
+      newBatch.push(lead);
+    }
+
+    const current = getStoredLeads();
+    saveLeads([...newBatch, ...current]);
+    setIsSeeding(false);
+
+    showToast(
+      "High-Volume Seed Complete",
+      `Injected ${count} enterprise accounts into CRM. Total active: ${current.length + count} accounts.`,
+      "success"
+    );
+  };
+
   return (
     <div className="space-y-6">
-      {/* Top Filter & Search Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-slate-900/70 border border-slate-800">
-        <div className="relative flex-1 max-w-md">
-          <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search leads by company, person, niche or location..."
-            className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
-          />
+      {/* Top Controls: View Switcher, Search & Volume Injection */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-2xl bg-slate-900/70 border border-slate-800">
+        {/* Left: View Mode Toggle */}
+        <div className="flex items-center gap-2 bg-slate-950 p-1 rounded-xl border border-slate-800">
+          <button
+            onClick={() => setViewMode("kanban")}
+            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              viewMode === "kanban"
+                ? "bg-emerald-500 text-slate-950 shadow-glow"
+                : "text-slate-400 hover:text-white"
+            }`}
+          >
+            <KanbanIcon className="w-3.5 h-3.5" />
+            <span>Kanban Board</span>
+          </button>
+          <button
+            onClick={() => setViewMode("table")}
+            className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              viewMode === "table"
+                ? "bg-emerald-500 text-slate-950 shadow-glow"
+                : "text-slate-400 hover:text-white"
+            }`}
+          >
+            <TableIcon className="w-3.5 h-3.5" />
+            <span>High-Density Table (1,000+)</span>
+          </button>
         </div>
 
-        <div className="flex items-center gap-3">
+        {/* Center: Search (Kanban mode) */}
+        {viewMode === "kanban" && (
+          <div className="relative flex-1 max-w-sm">
+            <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search across all pipeline stages..."
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+            />
+          </div>
+        )}
+
+        {/* Right: Actions */}
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={() => handleBulkSeed(50)}
+            disabled={isSeeding}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 transition-colors"
+            title="Inject 50 sample leads to test high-volume scaling"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+            <span>+ Add 50 Sample Accounts</span>
+          </button>
+
           <Link
             href="/prospecting"
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-slate-950 font-bold text-xs shadow-glow transition-all"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-slate-950 font-bold text-xs shadow-glow transition-all"
           >
             <Plus className="w-4 h-4" />
-            <span>Discover More Leads</span>
+            <span>Prospect Leads</span>
           </Link>
         </div>
       </div>
 
-      {/* Kanban Board Horizontal Scroll */}
-      <div className="flex gap-5 overflow-x-auto pb-4 scrollbar-thin">
-        {COLUMNS.map((col) => {
-          const colLeads = filteredLeads.filter((l) => l.stage === col.id);
-          return (
-            <KanbanColumn
-              key={col.id}
-              column={col}
-              leads={colLeads}
-              onSelectLead={(lead) => setSelectedLead(lead)}
-              onMoveStage={onUpdateStage}
-            />
-          );
-        })}
-      </div>
+      {/* Main View: Kanban or High-Density Table */}
+      {viewMode === "kanban" ? (
+        <div className="flex gap-5 overflow-x-auto pb-4 scrollbar-thin">
+          {COLUMNS.map((col) => {
+            const colLeads = filteredLeads.filter((l) => l.stage === col.id);
+            return (
+              <KanbanColumn
+                key={col.id}
+                column={col}
+                leads={colLeads}
+                onSelectLead={(lead) => setSelectedLead(lead)}
+                onMoveStage={onUpdateStage}
+              />
+            );
+          })}
+        </div>
+      ) : (
+        <PipelineTableView
+          leads={leads}
+          onSelectLead={(lead) => setSelectedLead(lead)}
+          onUpdateStage={onUpdateStage}
+          onDeleteLead={onDeleteLead}
+        />
+      )}
 
       {/* Lead Detail Modal */}
       {selectedLead && (

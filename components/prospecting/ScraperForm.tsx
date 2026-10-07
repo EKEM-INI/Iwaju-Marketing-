@@ -114,10 +114,11 @@ export function ScraperForm({ onStartScrape, isLoading }: ScraperFormProps) {
               className="bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-emerald-500 font-mono"
               disabled={isLoading}
             >
-              <option value={4}>4 Leads</option>
               <option value={6}>6 Leads</option>
-              <option value={8}>8 Leads</option>
               <option value={12}>12 Leads</option>
+              <option value={25}>25 Leads</option>
+              <option value={50}>50 Leads</option>
+              <option value={100}>100 Leads (Bulk)</option>
             </select>
           </div>
         </div>
