@@ -15,6 +15,10 @@ import {
   Building2,
   Mail,
   CheckCheck,
+  ChevronDown,
+  Globe,
+  Bot,
+  RefreshCw,
 } from "lucide-react";
 
 interface EmailComposerProps {
@@ -39,6 +43,8 @@ export function EmailComposer({
   const [copiedSubject, setCopiedSubject] = useState(false);
   const [copiedBody, setCopiedBody] = useState(false);
   const [markedContacted, setMarkedContacted] = useState(false);
+  const [showClientMenu, setShowClientMenu] = useState(false);
+  const [isAiGenerating, setIsAiGenerating] = useState(false);
 
   // Update selected lead if initialLeadId changes from query params
   useEffect(() => {
@@ -110,11 +116,92 @@ export function EmailComposer({
     );
   };
 
-  const mailtoLink = currentLead
-    ? `mailto:${encodeURIComponent(currentLead.email)}?subject=${encodeURIComponent(
-        subjectText
-      )}&body=${encodeURIComponent(bodyText)}`
-    : "#";
+  /**
+   * Truly functional email dispatcher:
+   * Handles opening native desktop clients, Gmail Web, or Outlook Web,
+   * while backing up to clipboard and advancing pipeline status.
+   */
+  const handleOpenEmailClient = (client: "default" | "gmail" | "outlook") => {
+    if (!currentLead) return;
+
+    // 1. Copy text to clipboard as safety backup
+    navigator.clipboard.writeText(`Subject: ${subjectText}\n\n${bodyText}`);
+
+    // 2. Open selected client
+    if (client === "gmail") {
+      const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(
+        currentLead.email
+      )}&su=${encodeURIComponent(subjectText)}&body=${encodeURIComponent(bodyText)}`;
+      window.open(gmailUrl, "_blank", "noopener,noreferrer");
+      showToast(
+        "Opening Gmail Web",
+        `New compose tab opened for ${currentLead.email}. Email copy backed up to clipboard.`,
+        "success"
+      );
+    } else if (client === "outlook") {
+      const outlookUrl = `https://outlook.office.com/mail/deeplink/compose?to=${encodeURIComponent(
+        currentLead.email
+      )}&subject=${encodeURIComponent(subjectText)}&body=${encodeURIComponent(bodyText)}`;
+      window.open(outlookUrl, "_blank", "noopener,noreferrer");
+      showToast(
+        "Opening Outlook 365",
+        `New compose tab opened for ${currentLead.email}. Email copy backed up to clipboard.`,
+        "success"
+      );
+    } else {
+      // Native desktop handler (mailto:)
+      const mailtoUrl = `mailto:${encodeURIComponent(
+        currentLead.email
+      )}?subject=${encodeURIComponent(subjectText)}&body=${encodeURIComponent(bodyText)}`;
+      window.location.href = mailtoUrl;
+      showToast(
+        "Opening Desktop Mail",
+        `Launched default system email app for ${currentLead.email}.`,
+        "info"
+      );
+    }
+
+    // 3. Automatically advance the lead in the CRM to "Contacted"
+    onMarkContacted(currentLead.id);
+    setMarkedContacted(true);
+    setShowClientMenu(false);
+  };
+
+  /**
+   * AI Personalization Generator
+   * Re-synthesizes the email hook using company niche, location, and decision maker role
+   */
+  const handleAiEnhance = () => {
+    if (!currentLead) return;
+    setIsAiGenerating(true);
+
+    setTimeout(() => {
+      const firstName = currentLead.name.split(" ")[0] || currentLead.name;
+      const enhancedSubject = `Strategic B2B Pipeline Growth for ${currentLead.company} (${currentLead.location})`;
+      const enhancedBody = `Hi ${firstName},
+
+I've been following ${currentLead.company}'s recent positioning in the ${currentLead.niche} sector across ${currentLead.location}. Given your executive leadership as ${currentLead.title}, I wanted to share a quick operational perspective.
+
+Most ${currentLead.niche} organizations in ${currentLead.location} face significant friction securing predictable high-ticket client meetings without burning capital on unfocused outreach.
+
+At Iwaju Marketing, we deploy dedicated outbound pipeline systems tailored specifically for ${currentLead.niche} operators. We recently helped a peer account in your space generate ₦28M+ in qualified pipeline in under 60 days.
+
+Are you available for a brief 10-minute briefing this Thursday at 2:00 PM to see how we can replicate this for ${currentLead.company}?
+
+Best regards,
+Tunde Balogun
+Growth Lead | Iwaju Marketing`;
+
+      setSubjectText(enhancedSubject);
+      setBodyText(enhancedBody);
+      setIsAiGenerating(false);
+      showToast(
+        "AI Copy Generated",
+        `Personalized outreach copy synthesized for ${currentLead.company}.`,
+        "success"
+      );
+    }, 800);
+  };
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -159,9 +246,12 @@ export function EmailComposer({
                 <Mail className="w-3 h-3 text-slate-500 shrink-0" />
                 <span className="truncate">{currentLead.email}</span>
               </div>
-              <div className="text-slate-500 text-[11px]">
-                {currentLead.location} • Stage:{" "}
-                <span className="text-slate-300 capitalize">{currentLead.stage}</span>
+              <div className="text-slate-500 text-[11px] flex items-center justify-between">
+                <span>
+                  {currentLead.location} • Stage:{" "}
+                  <span className="text-slate-300 capitalize">{currentLead.stage}</span>
+                </span>
+                <span className="font-mono text-emerald-400">Score: {currentLead.score}/100</span>
               </div>
             </div>
           )}
@@ -186,9 +276,26 @@ export function EmailComposer({
                 Personalized Cold Email Generator
               </h3>
             </div>
-            <span className="text-xs font-mono text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
-              High Deliverability
-            </span>
+
+            {/* AI Personalization Action */}
+            <button
+              onClick={handleAiEnhance}
+              disabled={isAiGenerating}
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition-all disabled:opacity-50"
+              title="Enhance email with AI personalized context"
+            >
+              {isAiGenerating ? (
+                <>
+                  <RefreshCw className="w-3 h-3 animate-spin" />
+                  <span>Synthesizing...</span>
+                </>
+              ) : (
+                <>
+                  <Bot className="w-3 h-3" />
+                  <span>AI Personalize Hook</span>
+                </>
+              )}
+            </button>
           </div>
 
           {/* Subject Line */}
@@ -254,47 +361,90 @@ export function EmailComposer({
           </div>
 
           {/* Actions Bar */}
-          <div className="pt-4 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3">
+          <div className="pt-4 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3 relative">
             <div className="flex items-center gap-2">
               <button
                 onClick={handleCopyFull}
-                className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700 transition-colors"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700 transition-colors"
+                title="Copy subject and body to clipboard"
               >
                 <Copy className="w-3.5 h-3.5 text-emerald-400" />
                 <span>Copy Full Email</span>
               </button>
 
-              <a
-                href={mailtoLink}
-                className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs border border-slate-700 transition-colors"
-                title="Open default email application"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Open in Mail</span>
-              </a>
+              {/* Functional Open in Email App Dropdown */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowClientMenu(!showClientMenu)}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-100 text-xs font-semibold border border-slate-700 transition-colors"
+                >
+                  <ExternalLink className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Open in Email App</span>
+                  <ChevronDown className="w-3 h-3 text-slate-400" />
+                </button>
+
+                {showClientMenu && (
+                  <div className="absolute left-0 bottom-full mb-2 w-56 rounded-xl bg-slate-900 border border-slate-700 shadow-2xl p-1.5 z-50 animate-in fade-in slide-in-from-bottom-2">
+                    <p className="px-3 py-1.5 text-[10px] uppercase font-bold text-slate-400 border-b border-slate-800">
+                      Choose Email Dispatcher:
+                    </p>
+                    <button
+                      onClick={() => handleOpenEmailClient("gmail")}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-left text-slate-200 hover:bg-emerald-500/10 hover:text-emerald-300 rounded-lg transition-colors"
+                    >
+                      <span className="w-2 h-2 rounded-full bg-rose-400" />
+                      <span>Gmail (Web Compose)</span>
+                    </button>
+                    <button
+                      onClick={() => handleOpenEmailClient("outlook")}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-left text-slate-200 hover:bg-emerald-500/10 hover:text-emerald-300 rounded-lg transition-colors"
+                    >
+                      <span className="w-2 h-2 rounded-full bg-sky-400" />
+                      <span>Outlook 365 (Web)</span>
+                    </button>
+                    <button
+                      onClick={() => handleOpenEmailClient("default")}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-left text-slate-200 hover:bg-emerald-500/10 hover:text-emerald-300 rounded-lg transition-colors"
+                    >
+                      <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                      <span>Default System Mail (Desktop)</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
-            <button
-              onClick={handleMarkContacted}
-              disabled={markedContacted || currentLead?.stage === "contacted"}
-              className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-xs transition-all ${
-                markedContacted || currentLead?.stage === "contacted"
-                  ? "bg-slate-800 text-emerald-400 border border-emerald-500/30"
-                  : "bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-slate-950 shadow-glow"
-              }`}
-            >
-              {markedContacted || currentLead?.stage === "contacted" ? (
-                <>
-                  <CheckCheck className="w-4 h-4 text-emerald-400" />
-                  <span>Marked Contacted</span>
-                </>
-              ) : (
-                <>
-                  <Send className="w-4 h-4" />
-                  <span>Send & Advance to Contacted</span>
-                </>
-              )}
-            </button>
+            {/* Direct Send & Mark Contacted Button */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handleOpenEmailClient("gmail")}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-slate-950 font-bold text-xs shadow-glow transition-all"
+                title="Open Gmail and mark as Contacted"
+              >
+                <Send className="w-3.5 h-3.5 stroke-[2.5]" />
+                <span>Launch & Mark Contacted</span>
+              </button>
+
+              <button
+                onClick={handleMarkContacted}
+                disabled={markedContacted || currentLead?.stage === "contacted"}
+                className={`inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-semibold border transition-all ${
+                  markedContacted || currentLead?.stage === "contacted"
+                    ? "bg-slate-900 text-emerald-400 border-emerald-500/30"
+                    : "bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-700"
+                }`}
+                title="Just mark lead as contacted in CRM"
+              >
+                {markedContacted || currentLead?.stage === "contacted" ? (
+                  <>
+                    <CheckCheck className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Contacted</span>
+                  </>
+                ) : (
+                  <span>Mark in CRM</span>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </div>

@@ -125,10 +125,17 @@ export function LeadDetailModal({
                 <p className="text-xs text-emerald-400 font-medium">{lead.title}</p>
               </div>
               <div className="pt-2 border-t border-slate-800/80 space-y-1.5 text-xs text-slate-300 font-mono">
-                <div className="flex items-center gap-2 truncate">
-                  <Mail className="w-3.5 h-3.5 text-slate-500" />
-                  <span className="truncate">{lead.email}</span>
-                </div>
+                <a
+                  href={`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(lead.email)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-2 truncate hover:text-emerald-400 transition-colors group"
+                  title="Click to open compose in Gmail"
+                >
+                  <Mail className="w-3.5 h-3.5 text-slate-500 group-hover:text-emerald-400" />
+                  <span className="truncate underline decoration-slate-700 underline-offset-2">{lead.email}</span>
+                  <ExternalLink className="w-3 h-3 text-slate-500 ml-auto shrink-0" />
+                </a>
                 <div className="flex items-center gap-2">
                   <Phone className="w-3.5 h-3.5 text-slate-500" />
                   <span>{lead.phone}</span>
