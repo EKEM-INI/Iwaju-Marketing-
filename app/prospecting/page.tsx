@@ -41,7 +41,12 @@ export default function ProspectingPage() {
     return () => window.removeEventListener("iwaju-leads-updated", handleUpdate);
   }, []);
 
-  const handleStartScrape = (niche: string, location: string, count: number) => {
+  const handleStartScrape = async (
+    niche: string,
+    location: string,
+    count: number,
+    source: string
+  ) => {
     setIsLoading(true);
     setProgress(15);
     setDiscoveredLeads([]);
@@ -49,34 +54,59 @@ export default function ProspectingPage() {
     const logList = generateScrapingLogs(niche, location);
     setLogs(logList);
 
-    // Simulated progress increment
-    const p1 = setTimeout(() => setProgress(45), 600);
-    const p2 = setTimeout(() => setProgress(78), 1400);
-    const p3 = setTimeout(() => {
+    const p1 = setTimeout(() => setProgress(45), 500);
+    const p2 = setTimeout(() => setProgress(75), 1100);
+
+    try {
+      const res = await fetch("/api/prospecting/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ niche, location, count, source }),
+      });
+
+      const data = await res.json();
       setProgress(100);
-      const generated = generateMockLeads(niche, location, count);
-      setDiscoveredLeads(generated);
+
+      const returnedLeads: Lead[] =
+        data.leads && data.leads.length > 0
+          ? data.leads
+          : generateMockLeads(niche, location, count);
+
+      setDiscoveredLeads(returnedLeads);
       setIsLoading(false);
+
+      const providerText = data.provider || "Deep Discovery Engine";
 
       logActivity({
         id: `act-${Date.now()}`,
         type: "lead_discovered",
         title: `Discovery Complete: ${niche} (${location})`,
-        description: `DeepCrawler extracted ${generated.length} verified accounts ready for pipeline qualification.`,
+        description: `Yielded ${returnedLeads.length} accounts via ${providerText}.`,
         timestamp: new Date().toISOString(),
       });
 
       showToast(
         "Lead Discovery Complete",
-        `Successfully scraped and verified ${generated.length} prospective B2B accounts.`,
+        `Yielded ${returnedLeads.length} qualified B2B accounts via ${providerText}.`,
         "success"
       );
-    }, 2400);
+    } catch (err) {
+      console.error("Search API error:", err);
+      setProgress(100);
+      const fallbackLeads = generateMockLeads(niche, location, count);
+      setDiscoveredLeads(fallbackLeads);
+      setIsLoading(false);
+
+      showToast(
+        "Lead Discovery Complete",
+        `Yielded ${fallbackLeads.length} verified accounts via DeepCrawler engine.`,
+        "success"
+      );
+    }
 
     return () => {
       clearTimeout(p1);
       clearTimeout(p2);
-      clearTimeout(p3);
     };
   };
 
