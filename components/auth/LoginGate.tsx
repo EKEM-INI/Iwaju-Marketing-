@@ -82,20 +82,18 @@ export function LoginGate({ children }: { children: React.ReactNode }) {
 
     setSubmitting(true);
     try {
-      const res = await registerWithEmail(email, password, name);
-      if (res.success) {
-        setEmailMode("verify");
-      } else {
+      const res = await registerWithEmail(name, email, password);
+      // The account exists and a code was generated either way; if the email
+      // could not be delivered, surface the code so the user can still verify.
+      if (!res.emailSent) {
         setErrorMsg(res.error || "Failed to dispatch verification code.");
-        if (res.details) {
-          setDeliveryIssue({
-            isRestricted: res.details.isRestricted,
-            error: res.error,
-            code: res.details.code,
-          });
-          setEmailMode("verify");
-        }
+        setDeliveryIssue({
+          isRestricted: res.isRestricted,
+          error: res.error,
+          code: res.code,
+        });
       }
+      setEmailMode("verify");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Error creating account";
       setErrorMsg(msg);
@@ -109,12 +107,9 @@ export function LoginGate({ children }: { children: React.ReactNode }) {
     setErrorMsg("");
     setSubmitting(true);
     try {
-      const res = await verifyEmailCode(email, verificationCode);
-      if (!res.success) {
-        setErrorMsg(res.error || "Invalid verification code.");
-      }
-    } catch {
-      setErrorMsg("Verification failed. Please try again.");
+      await verifyEmailCode(email, verificationCode);
+    } catch (err: unknown) {
+      setErrorMsg(err instanceof Error ? err.message : "Verification failed. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -126,11 +121,11 @@ export function LoginGate({ children }: { children: React.ReactNode }) {
     setSubmitting(true);
     try {
       const res = await resendVerificationCode(email);
-      if (res.details?.isRestricted) {
+      if (!res.emailSent) {
         setDeliveryIssue({
-          isRestricted: true,
+          isRestricted: res.isRestricted,
           error: res.error,
-          code: res.details.code,
+          code: res.code,
         });
       }
     } catch {
