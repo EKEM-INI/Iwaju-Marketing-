@@ -49,7 +49,7 @@ export async function POST(req: Request) {
       <head>
         <meta charset="utf-8">
         <style>
-          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #080c14; color: #f1f5f9; padding: 40px 20px; }
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #000000; color: #f1f5f9; padding: 40px 20px; }
           .container { max-width: 520px; margin: 0 auto; background: #0f172a; border: 1px solid #1e293b; border-radius: 16px; padding: 32px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
           .logo { display: inline-block; font-size: 20px; font-weight: 800; color: #10b981; letter-spacing: -0.5px; margin-bottom: 24px; }
           .title { font-size: 20px; font-weight: 700; color: #ffffff; margin-bottom: 12px; }

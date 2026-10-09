@@ -123,15 +123,15 @@ export function KanbanBoard({
   return (
     <div className="space-y-6">
       {/* Top Controls: View Switcher, Search & Volume Injection */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-2xl bg-slate-900/70 border border-slate-800">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-2xl bg-zinc-900/70 border border-zinc-800">
         {/* Left: View Mode Toggle */}
-        <div className="flex items-center gap-2 bg-slate-950 p-1 rounded-xl border border-slate-800">
+        <div className="flex items-center gap-2 bg-zinc-950 p-1 rounded-xl border border-zinc-800">
           <button
             onClick={() => setViewMode("kanban")}
             className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
               viewMode === "kanban"
-                ? "bg-emerald-500 text-slate-950 shadow-glow"
-                : "text-slate-400 hover:text-white"
+                ? "bg-zinc-800 text-white shadow-glow"
+                : "text-zinc-400 hover:text-white"
             }`}
           >
             <KanbanIcon className="w-3.5 h-3.5" />
@@ -141,8 +141,8 @@ export function KanbanBoard({
             onClick={() => setViewMode("table")}
             className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
               viewMode === "table"
-                ? "bg-emerald-500 text-slate-950 shadow-glow"
-                : "text-slate-400 hover:text-white"
+                ? "bg-zinc-800 text-white shadow-glow"
+                : "text-zinc-400 hover:text-white"
             }`}
           >
             <TableIcon className="w-3.5 h-3.5" />
@@ -153,13 +153,13 @@ export function KanbanBoard({
         {/* Center: Search (Kanban mode) */}
         {viewMode === "kanban" && (
           <div className="relative flex-1 max-w-sm">
-            <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -tranzinc-y-1/2" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search across all pipeline stages..."
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500"
             />
           </div>
         )}
@@ -169,7 +169,7 @@ export function KanbanBoard({
           <button
             onClick={() => handleBulkSeed(50)}
             disabled={isSeeding}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold border border-zinc-700 transition-colors"
             title="Inject 50 sample leads to test high-volume scaling"
           >
             <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
@@ -178,7 +178,7 @@ export function KanbanBoard({
 
           <Link
             href="/prospecting"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-slate-950 font-bold text-xs shadow-glow transition-all"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white hover:bg-zinc-200 text-black font-bold text-xs shadow-glow transition-all"
           >
             <Plus className="w-4 h-4" />
             <span>Prospect Leads</span>

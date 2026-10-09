@@ -26,20 +26,20 @@ export function KanbanColumn({
   const hasMore = leads.length > visibleCount;
 
   return (
-    <div className="flex flex-col rounded-2xl bg-slate-950/50 border border-slate-800/90 w-80 shrink-0 h-[calc(100vh-14rem)] min-h-[500px]">
+    <div className="flex flex-col rounded-2xl bg-zinc-950/50 border border-zinc-800/90 w-80 shrink-0 h-[calc(100vh-14rem)] min-h-[500px]">
       {/* Column Header */}
-      <div className={`p-4 border-b border-slate-800/80 ${column.borderCol} border-t-2 rounded-t-2xl bg-slate-900/60`}>
+      <div className={`p-4 border-b border-zinc-800/80 ${column.borderCol} border-t-2 rounded-t-2xl bg-zinc-900/60`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className={`w-2.5 h-2.5 rounded-full ${column.color}`} />
-            <h3 className="font-bold text-sm text-slate-100">{column.title}</h3>
+            <h3 className="font-bold text-sm text-zinc-100">{column.title}</h3>
           </div>
-          <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">
+          <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300">
             {leads.length}
           </span>
         </div>
 
-        <div className="mt-2 text-xs flex items-center justify-between text-slate-400 font-mono">
+        <div className="mt-2 text-xs flex items-center justify-between text-zinc-400 font-mono">
           <span>Stage Value:</span>
           <span className="font-bold text-emerald-400">
             {formatCurrency(totalValue)}
@@ -50,7 +50,7 @@ export function KanbanColumn({
       {/* Cards Scrollable Container */}
       <div className="p-3 flex-1 overflow-y-auto space-y-3 scrollbar-thin">
         {leads.length === 0 ? (
-          <div className="h-40 flex flex-col items-center justify-center text-center p-4 border border-dashed border-slate-800 rounded-xl text-slate-600">
+          <div className="h-40 flex flex-col items-center justify-center text-center p-4 border border-dashed border-zinc-800 rounded-xl text-zinc-600">
             <p className="text-xs">No prospects in this stage</p>
           </div>
         ) : (
@@ -67,7 +67,7 @@ export function KanbanColumn({
             {hasMore && (
               <button
                 onClick={() => setVisibleCount((prev) => prev + 25)}
-                className="w-full py-2.5 px-3 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-slate-800 text-xs text-slate-300 hover:text-white font-medium transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+                className="w-full py-2.5 px-3 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 text-xs text-zinc-300 hover:text-white font-medium transition-colors flex items-center justify-center gap-1.5 shadow-sm"
               >
                 <ChevronDown className="w-3.5 h-3.5 text-emerald-400" />
                 <span>

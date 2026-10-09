@@ -7,15 +7,13 @@ import { MetricCards } from "@/components/dashboard/MetricCards";
 import { PipelineSummary } from "@/components/dashboard/PipelineSummary";
 import { RecentActivity } from "@/components/dashboard/RecentActivity";
 import { QuickActionBanner } from "@/components/dashboard/QuickActionBanner";
-import { Sparkles, Calendar, Layers } from "lucide-react";
+import { Calendar, Layers } from "lucide-react";
 
 export default function DashboardPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
-  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
-    setIsMounted(true);
     setLeads(getStoredLeads());
     setActivities(getStoredActivities());
 
@@ -39,32 +37,32 @@ export default function DashboardPage() {
   }).format(new Date());
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-300">
+    <div className="space-y-6 animate-in fade-in duration-200">
       {/* Top Welcome Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-xs uppercase font-extrabold tracking-widest text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+            <span className="text-[10px] uppercase font-mono tracking-wider text-zinc-400 bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800">
               Command Center
             </span>
-            <span className="text-xs text-slate-500">•</span>
-            <span className="text-xs text-slate-400 flex items-center gap-1">
-              <Calendar className="w-3.5 h-3.5 text-slate-500" />
+            <span className="text-xs text-zinc-600">•</span>
+            <span className="text-xs text-zinc-500 flex items-center gap-1 font-mono">
+              <Calendar className="w-3 h-3 text-zinc-500" />
               <span>{todayStr}</span>
             </span>
           </div>
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight mt-1">
+          <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight mt-1.5">
             Outbound Revenue Velocity
           </h2>
-          <p className="text-xs sm:text-sm text-slate-400 mt-1 max-w-2xl">
+          <p className="text-xs sm:text-sm text-zinc-400 mt-1 max-w-2xl">
             Real-time pipeline analytics, high-speed automated lead discovery, and AI cold conversion operations.
           </p>
         </div>
 
-        <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-800 text-xs text-slate-400">
-          <Layers className="w-4 h-4 text-emerald-400" />
-          <span>Sync Status:</span>
-          <span className="font-semibold text-emerald-400">LocalStorage Active</span>
+        <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-xs text-zinc-400 font-mono">
+          <Layers className="w-3.5 h-3.5 text-zinc-300" />
+          <span>Storage:</span>
+          <span className="font-semibold text-white">Encrypted Local Ledger</span>
         </div>
       </div>
 
@@ -75,7 +73,7 @@ export default function DashboardPage() {
       <QuickActionBanner />
 
       {/* 2-Column: Funnel Analytics & Recent Activities */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
         <div className="lg:col-span-8">
           <PipelineSummary leads={leads} />
         </div>

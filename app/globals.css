@@ -4,7 +4,9 @@
 
 :root {
   --background: #000000;
-  --foreground: #f8fafc;
+  --foreground: #f4f4f5;
+  --card: #09090b;
+  --border: #27272a;
 }
 
 body {
@@ -13,10 +15,10 @@ body {
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
 }
 
-/* Custom Executive Scrollbar */
+/* Minimalist Dark Scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
@@ -24,20 +26,20 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #1e293b;
+  background: #27272a;
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #334155;
+  background: #3f3f46;
 }
 
-/* Glassmorphism utility */
+/* Crisp Dark Panels */
 .glass-panel {
-  background: rgba(15, 23, 42, 0.7);
+  background: rgba(9, 9, 11, 0.85);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(51, 65, 85, 0.6);
+  border: 1px solid #27272a;
 }
 
 @layer utilities {

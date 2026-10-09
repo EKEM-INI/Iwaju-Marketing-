@@ -63,9 +63,9 @@ export function LeadDetailModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-2xl bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+      <div className="relative w-full max-w-2xl bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="p-6 border-b border-slate-800 bg-slate-900/60 flex items-start justify-between gap-4">
+        <div className="p-6 border-b border-zinc-800 bg-zinc-900/60 flex items-start justify-between gap-4">
           <div className="space-y-1">
             <div className="flex items-center gap-3">
               <h3 className="text-xl font-bold text-white flex items-center gap-2">
@@ -74,7 +74,7 @@ export function LeadDetailModal({
               </h3>
               <LeadScoreBadge score={lead.score} />
             </div>
-            <p className="text-xs text-slate-400 flex items-center gap-2">
+            <p className="text-xs text-zinc-400 flex items-center gap-2">
               <span>{lead.niche}</span>
               <span>•</span>
               <span>{lead.location}</span>
@@ -83,7 +83,7 @@ export function LeadDetailModal({
 
           <button
             onClick={onClose}
-            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -92,8 +92,8 @@ export function LeadDetailModal({
         {/* Content Body */}
         <div className="p-6 space-y-6 overflow-y-auto flex-1 scrollbar-thin">
           {/* Stage Selector Bar */}
-          <div className="p-4 rounded-xl bg-slate-900/70 border border-slate-800 space-y-2">
-            <label className="text-xs font-semibold uppercase tracking-wider text-slate-400 block">
+          <div className="p-4 rounded-xl bg-zinc-900/70 border border-zinc-800 space-y-2">
+            <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400 block">
               Current Pipeline Stage
             </label>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -104,7 +104,7 @@ export function LeadDetailModal({
                   className={`py-2 px-3 rounded-lg text-xs font-semibold border transition-all ${
                     lead.stage === s.id
                       ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-glow"
-                      : "bg-slate-950/80 text-slate-400 border-slate-800 hover:border-slate-700 hover:text-slate-200"
+                      : "bg-zinc-950/80 text-zinc-400 border-zinc-800 hover:border-zinc-700 hover:text-zinc-200"
                   }`}
                 >
                   {s.label}
@@ -115,8 +115,8 @@ export function LeadDetailModal({
 
           {/* Contact & Decision Maker Card */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="p-4 rounded-xl bg-slate-900/70 border border-slate-800 space-y-2.5">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+            <div className="p-4 rounded-xl bg-zinc-900/70 border border-zinc-800 space-y-2.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 flex items-center gap-1.5">
                 <User className="w-3.5 h-3.5 text-emerald-400" />
                 <span>Primary Decision Maker</span>
               </span>
@@ -124,7 +124,7 @@ export function LeadDetailModal({
                 <p className="text-sm font-bold text-white">{lead.name}</p>
                 <p className="text-xs text-emerald-400 font-medium">{lead.title}</p>
               </div>
-              <div className="pt-2 border-t border-slate-800/80 space-y-1.5 text-xs text-slate-300 font-mono">
+              <div className="pt-2 border-t border-zinc-800/80 space-y-1.5 text-xs text-zinc-300 font-mono">
                 <a
                   href={`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(lead.email)}`}
                   target="_blank"
@@ -132,41 +132,41 @@ export function LeadDetailModal({
                   className="flex items-center gap-2 truncate hover:text-emerald-400 transition-colors group"
                   title="Click to open compose in Gmail"
                 >
-                  <Mail className="w-3.5 h-3.5 text-slate-500 group-hover:text-emerald-400" />
-                  <span className="truncate underline decoration-slate-700 underline-offset-2">{lead.email}</span>
-                  <ExternalLink className="w-3 h-3 text-slate-500 ml-auto shrink-0" />
+                  <Mail className="w-3.5 h-3.5 text-zinc-500 group-hover:text-emerald-400" />
+                  <span className="truncate underline decoration-zinc-700 underline-offset-2">{lead.email}</span>
+                  <ExternalLink className="w-3 h-3 text-zinc-500 ml-auto shrink-0" />
                 </a>
                 <div className="flex items-center gap-2">
-                  <Phone className="w-3.5 h-3.5 text-slate-500" />
+                  <Phone className="w-3.5 h-3.5 text-zinc-500" />
                   <span>{lead.phone}</span>
                 </div>
               </div>
             </div>
 
-            <div className="p-4 rounded-xl bg-slate-900/70 border border-slate-800 space-y-2.5">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+            <div className="p-4 rounded-xl bg-zinc-900/70 border border-zinc-800 space-y-2.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500 flex items-center gap-1.5">
                 <Building2 className="w-3.5 h-3.5 text-emerald-400" />
                 <span>Deal & Commercial Scope</span>
               </span>
               <div>
-                <p className="text-[11px] text-slate-400">Estimated Value:</p>
+                <p className="text-[11px] text-zinc-400">Estimated Value:</p>
                 <p className="text-lg font-bold font-mono text-emerald-400">
                   {formatCurrency(lead.dealValue, lead.currency)}
                 </p>
               </div>
-              <div className="pt-2 border-t border-slate-800/80 space-y-1.5 text-xs">
+              <div className="pt-2 border-t border-zinc-800/80 space-y-1.5 text-xs">
                 <a
                   href={lead.website}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex items-center gap-1.5 text-slate-300 hover:text-emerald-400 transition-colors"
+                  className="flex items-center gap-1.5 text-zinc-300 hover:text-emerald-400 transition-colors"
                 >
-                  <Globe className="w-3.5 h-3.5 text-slate-500" />
+                  <Globe className="w-3.5 h-3.5 text-zinc-500" />
                   <span className="truncate">{lead.website}</span>
                   <ExternalLink className="w-3 h-3 ml-auto" />
                 </a>
-                <div className="flex items-center gap-1 text-[11px] text-slate-400">
-                  <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                <div className="flex items-center gap-1 text-[11px] text-zinc-400">
+                  <Calendar className="w-3.5 h-3.5 text-zinc-500" />
                   <span>Added {formatDate(lead.createdAt)}</span>
                 </div>
               </div>
@@ -176,7 +176,7 @@ export function LeadDetailModal({
           {/* Notes Editor */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+              <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
                 Lead Intelligence & Meeting Notes
               </label>
               {isSaved && (
@@ -188,12 +188,12 @@ export function LeadDetailModal({
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Add key insights, objections, meeting notes or pipeline context..."
-              className="w-full bg-slate-900 border border-slate-800 rounded-xl p-3.5 text-xs sm:text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 font-sans"
+              className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3.5 text-xs sm:text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 font-sans"
             />
             <div className="flex justify-end">
               <button
                 onClick={handleSaveNotes}
-                className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition-colors"
+                className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-zinc-200 transition-colors"
               >
                 <Save className="w-3.5 h-3.5 text-emerald-400" />
                 <span>Save Notes</span>
@@ -203,7 +203,7 @@ export function LeadDetailModal({
         </div>
 
         {/* Footer Actions */}
-        <div className="p-4 sm:p-6 border-t border-slate-800 bg-slate-900/60 flex items-center justify-between gap-3">
+        <div className="p-4 sm:p-6 border-t border-zinc-800 bg-zinc-900/60 flex items-center justify-between gap-3">
           <button
             onClick={handleDelete}
             className="inline-flex items-center gap-1.5 py-2 px-3 text-xs text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors border border-rose-500/20"
@@ -215,7 +215,7 @@ export function LeadDetailModal({
           <div className="flex items-center gap-3">
             <button
               onClick={onClose}
-              className="py-2 px-4 text-xs font-semibold text-slate-400 hover:text-slate-200 transition-colors"
+              className="py-2 px-4 text-xs font-semibold text-zinc-400 hover:text-zinc-200 transition-colors"
             >
               Close
             </button>
@@ -223,7 +223,7 @@ export function LeadDetailModal({
             <Link
               href={`/outreach?leadId=${encodeURIComponent(lead.id)}`}
               onClick={onClose}
-              className="inline-flex items-center gap-2 py-2 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-glow transition-all"
+              className="inline-flex items-center gap-2 py-2 px-4 rounded-xl bg-white hover:bg-zinc-200 text-black font-bold text-xs shadow-glow transition-all"
             >
               <Send className="w-3.5 h-3.5" />
               <span>Launch Outreach Engine</span>

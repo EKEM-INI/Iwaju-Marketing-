@@ -159,8 +159,8 @@ export default function ProspectingPage() {
           <span className="text-xs uppercase font-extrabold tracking-widest text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
             Automated Crawler
           </span>
-          <span className="text-xs text-slate-500">•</span>
-          <span className="text-xs text-slate-400 flex items-center gap-1">
+          <span className="text-xs text-zinc-500">•</span>
+          <span className="text-xs text-zinc-400 flex items-center gap-1">
             <Radar className="w-3.5 h-3.5 text-emerald-400" />
             <span>High-Speed Lead Scraper</span>
           </span>
@@ -168,7 +168,7 @@ export default function ProspectingPage() {
         <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight mt-1">
           B2B Prospecting & Discovery Engine
         </h2>
-        <p className="text-xs sm:text-sm text-slate-400 mt-1 max-w-2xl">
+        <p className="text-xs sm:text-sm text-zinc-400 mt-1 max-w-2xl">
           Enter an industry vertical and regional perimeter. The simulated crawler parses
           commercial registries, validates corporate domain MX records, and extracts verified decision-makers.
         </p>

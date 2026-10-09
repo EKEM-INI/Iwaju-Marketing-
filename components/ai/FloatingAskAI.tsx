@@ -167,15 +167,15 @@ export function FloatingAskAI() {
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          className="fixed bottom-6 right-6 z-40 flex items-center gap-2.5 px-4 py-3 rounded-full bg-gradient-to-r from-emerald-500 via-teal-500 to-indigo-600 text-slate-950 font-bold text-sm shadow-xl shadow-emerald-500/25 hover:shadow-emerald-500/40 hover:scale-105 active:scale-95 transition-all duration-200 group border border-emerald-400/30"
+          className="fixed bottom-6 right-6 z-40 flex items-center gap-2.5 px-4 py-3 rounded-full bg-white hover:bg-zinc-200 text-black font-bold text-sm shadow-xl  hover:scale-105 active:scale-95 transition-all duration-200 group border border-zinc-300"
           aria-label="Open Iwaju AI Assistant"
         >
           <div className="relative">
-            <Sparkles className="w-5 h-5 text-slate-950 group-hover:rotate-45 transition-transform" />
+            <Sparkles className="w-5 h-5 text-black transition-transform" />
             <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-white animate-ping" />
           </div>
           <span className="tracking-wide">Ask AI</span>
-          <span className="hidden sm:inline-block text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-slate-950/20 text-slate-950 border border-slate-950/20">
+          <span className="hidden sm:inline-block text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-zinc-950/20 text-zinc-950 border border-zinc-950/20">
             Gemini
           </span>
         </button>
@@ -183,15 +183,15 @@ export function FloatingAskAI() {
 
       {isOpen && (
         <div
-          className={`fixed bottom-6 right-6 z-50 w-[92vw] sm:w-[420px] bg-slate-950/95 border border-slate-800 rounded-2xl shadow-2xl backdrop-blur-2xl flex flex-col transition-all duration-200 overflow-hidden ${
+          className={`fixed bottom-6 right-6 z-50 w-[92vw] sm:w-[420px] bg-zinc-950/95 border border-zinc-800 rounded-2xl shadow-2xl backdrop-blur-2xl flex flex-col transition-all duration-200 overflow-hidden ${
             isMinimized ? "h-14" : "h-[540px] max-h-[82vh]"
           }`}
         >
           {/* Header */}
-          <div className="px-4 py-3 border-b border-slate-800/80 bg-slate-900/80 flex items-center justify-between select-none">
+          <div className="px-4 py-3 border-b border-zinc-800/80 bg-zinc-900/80 flex items-center justify-between select-none">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-emerald-400 to-indigo-500 flex items-center justify-center shadow-sm">
-                <Sparkles className="w-4 h-4 text-slate-950" />
+              <div className="w-8 h-8 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center shadow-sm">
+                <Sparkles className="w-4 h-4 text-zinc-950" />
               </div>
               <div>
                 <div className="flex items-center gap-1.5">
@@ -203,7 +203,7 @@ export function FloatingAskAI() {
                     title={hasServerKey ? "Gemini API Connected" : "Local mode"}
                   />
                 </div>
-                <p className="text-[10px] text-slate-400 flex items-center gap-1">
+                <p className="text-[10px] text-zinc-400 flex items-center gap-1">
                   <span>Powered by Gemini 2.5</span>
                   {hasServerKey && (
                     <span className="text-emerald-400 font-medium">• Live API Active</span>
@@ -217,7 +217,7 @@ export function FloatingAskAI() {
                 onClick={() => setShowSettings(!showSettings)}
                 title="API Key Settings"
                 className={`p-1.5 rounded-lg transition-colors ${
-                  showSettings ? "bg-emerald-500/20 text-emerald-400" : "text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+                  showSettings ? "bg-emerald-500/20 text-emerald-400" : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
                 }`}
               >
                 <Settings className="w-3.5 h-3.5" />
@@ -226,7 +226,7 @@ export function FloatingAskAI() {
                 <button
                   onClick={clearChat}
                   title="Clear chat history"
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+                  className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
@@ -234,14 +234,14 @@ export function FloatingAskAI() {
               <button
                 onClick={() => setIsMinimized(!isMinimized)}
                 title={isMinimized ? "Expand" : "Minimize"}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+                className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
               >
                 {isMinimized ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
               </button>
               <button
                 onClick={() => setIsOpen(false)}
                 title="Close chat"
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -250,21 +250,21 @@ export function FloatingAskAI() {
 
           {/* Settings Overlay */}
           {showSettings && (
-            <div className="p-3.5 bg-slate-900 border-b border-slate-800 text-xs space-y-2.5 animate-in fade-in">
+            <div className="p-3.5 bg-zinc-900 border-b border-zinc-800 text-xs space-y-2.5 animate-in fade-in">
               <div className="flex items-center justify-between">
-                <span className="font-bold text-slate-200 flex items-center gap-1.5 text-[11px]">
+                <span className="font-bold text-zinc-200 flex items-center gap-1.5 text-[11px]">
                   <Key className="w-3 h-3 text-emerald-400" />
                   Gemini API Connection
                 </span>
                 <span
                   className={`text-[10px] px-2 py-0.5 rounded-full font-mono ${
-                    hasServerKey ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-slate-800 text-slate-400"
+                    hasServerKey ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-zinc-800 text-zinc-400"
                   }`}
                 >
                   {hasServerKey ? "Vercel Env Key Detected" : "Vercel Key Checking"}
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400 leading-snug">
+              <p className="text-[11px] text-zinc-400 leading-snug">
                 Your Vercel environment automatically supplies <code className="text-emerald-300">GEMINI_API_KEY</code>. You can also override or test with a direct key below:
               </p>
               <div className="flex gap-2">
@@ -273,11 +273,11 @@ export function FloatingAskAI() {
                   value={customKey}
                   onChange={(e) => setCustomKey(e.target.value)}
                   placeholder="Optional override: AIzaSy..."
-                  className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                  className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-emerald-500"
                 />
                 <button
                   onClick={handleSaveCustomKey}
-                  className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-lg transition-colors"
+                  className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs rounded-lg transition-colors"
                 >
                   Save
                 </button>
@@ -305,13 +305,13 @@ export function FloatingAskAI() {
                       className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 leading-relaxed ${
                         m.sender === "user"
                           ? "bg-emerald-600 text-white rounded-br-none shadow-sm"
-                          : "bg-slate-900 border border-slate-800 text-slate-200 rounded-bl-none"
+                          : "bg-zinc-900 border border-zinc-800 text-zinc-200 rounded-bl-none"
                       }`}
                     >
                       <div className="whitespace-pre-wrap font-sans">{m.text}</div>
                       <div
                         className={`text-[9px] mt-1 flex items-center justify-between gap-2 ${
-                          m.sender === "user" ? "text-emerald-200" : "text-slate-400"
+                          m.sender === "user" ? "text-emerald-200" : "text-zinc-400"
                         }`}
                       >
                         <span>{m.timestamp}</span>
@@ -327,11 +327,11 @@ export function FloatingAskAI() {
                 ))}
 
                 {loading && (
-                  <div className="flex gap-2.5 items-center text-slate-400">
+                  <div className="flex gap-2.5 items-center text-zinc-400">
                     <div className="w-6 h-6 rounded-md bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
                       <Bot className="w-3.5 h-3.5" />
                     </div>
-                    <div className="bg-slate-900 border border-slate-800 rounded-2xl px-3.5 py-2 text-xs flex items-center gap-1.5 text-slate-400">
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-3.5 py-2 text-xs flex items-center gap-1.5 text-zinc-400">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-bounce" />
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-bounce [animation-delay:0.2s]" />
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-bounce [animation-delay:0.4s]" />
@@ -348,7 +348,7 @@ export function FloatingAskAI() {
                     <button
                       key={idx}
                       onClick={() => handleSendMessage(s)}
-                      className="shrink-0 text-[10px] px-2.5 py-1 rounded-full bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 transition-colors"
+                      className="shrink-0 text-[10px] px-2.5 py-1 rounded-full bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 transition-colors"
                     >
                       {s}
                     </button>
@@ -356,7 +356,7 @@ export function FloatingAskAI() {
                 </div>
               )}
 
-              <div className="p-3 border-t border-slate-800/80 bg-slate-900/60">
+              <div className="p-3 border-t border-zinc-800/80 bg-zinc-900/60">
                 <div className="relative flex items-center">
                   <input
                     ref={inputRef}
@@ -370,19 +370,19 @@ export function FloatingAskAI() {
                       }
                     }}
                     placeholder="Ask about this site, prospecting, copy..."
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-3 pr-10 py-2.5 text-xs text-slate-100 placeholder-slate-400 focus:outline-none focus:border-emerald-500/70"
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-3 pr-10 py-2.5 text-xs text-zinc-100 placeholder-zinc-400 focus:outline-none focus:border-emerald-500/70"
                     disabled={loading}
                   />
                   <button
                     onClick={() => handleSendMessage()}
                     disabled={!input.trim() || loading}
-                    className="absolute right-1.5 p-1.5 rounded-lg bg-emerald-500 text-slate-950 hover:bg-emerald-400 disabled:opacity-40 disabled:pointer-events-none transition-colors"
+                    className="absolute right-1.5 p-1.5 rounded-lg bg-emerald-500 text-zinc-950 hover:bg-emerald-400 disabled:opacity-40 disabled:pointer-events-none transition-colors"
                     aria-label="Send message"
                   >
                     <Send className="w-3.5 h-3.5" />
                   </button>
                 </div>
-                <div className="mt-1.5 flex items-center justify-between text-[10px] text-slate-400 px-1">
+                <div className="mt-1.5 flex items-center justify-between text-[10px] text-zinc-400 px-1">
                   <span>Press Enter to send</span>
                   <span>Direct Gemini 2.5 API hook</span>
                 </div>

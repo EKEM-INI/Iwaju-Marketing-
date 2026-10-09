@@ -143,7 +143,7 @@ export function PipelineTableView({
   return (
     <div className="space-y-4">
       {/* Search, Filter Tabs & Export Bar */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-4 rounded-2xl bg-slate-900/80 border border-slate-800 backdrop-blur-md">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-4 rounded-2xl bg-zinc-900/80 border border-zinc-800 backdrop-blur-md">
         {/* Stage Filter Pills */}
         <div className="flex flex-wrap items-center gap-1.5">
           <button
@@ -153,8 +153,8 @@ export function PipelineTableView({
             }}
             className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
               selectedStage === "all"
-                ? "bg-emerald-500 text-slate-950 shadow-glow"
-                : "bg-slate-950 text-slate-400 hover:text-white border border-slate-800"
+                ? "bg-zinc-800 text-white shadow-glow"
+                : "bg-zinc-950 text-zinc-400 hover:text-white border border-zinc-800"
             }`}
           >
             All Accounts ({leads.length})
@@ -172,7 +172,7 @@ export function PipelineTableView({
                 className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
                   isSelected
                     ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 shadow-glow"
-                    : "bg-slate-950 text-slate-400 hover:text-white border border-slate-800"
+                    : "bg-zinc-950 text-zinc-400 hover:text-white border border-zinc-800"
                 }`}
               >
                 {s.label} ({count})
@@ -184,7 +184,7 @@ export function PipelineTableView({
         {/* Search & Actions */}
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative min-w-[240px]">
-            <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -tranzinc-y-1/2" />
             <input
               type="text"
               value={search}
@@ -193,13 +193,13 @@ export function PipelineTableView({
                 setPage(1);
               }}
               placeholder="Search across 1,000+ accounts..."
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500"
             />
           </div>
 
           <button
             onClick={exportCsv}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold border border-zinc-700 transition-colors"
             title="Export full list to CSV / Excel"
           >
             <Download className="w-3.5 h-3.5 text-emerald-400" />
@@ -209,11 +209,11 @@ export function PipelineTableView({
       </div>
 
       {/* Main Table Container */}
-      <div className="rounded-2xl border border-slate-800 bg-slate-950/70 overflow-hidden shadow-2xl backdrop-blur-md">
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 overflow-hidden shadow-2xl backdrop-blur-md">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="border-b border-slate-800 bg-slate-900/90 text-slate-400 font-semibold uppercase tracking-wider text-[11px] select-none">
+              <tr className="border-b border-zinc-800 bg-zinc-900/90 text-zinc-400 font-semibold uppercase tracking-wider text-[11px] select-none">
                 <th
                   onClick={() => handleSort("company")}
                   className="py-3.5 px-4 cursor-pointer hover:text-white transition-colors"
@@ -248,10 +248,10 @@ export function PipelineTableView({
                 <th className="py-3.5 px-4 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60 font-sans">
+            <tbody className="divide-y divide-zinc-800/60 font-sans">
               {paginatedLeads.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-500">
+                  <td colSpan={8} className="py-12 text-center text-zinc-500">
                     No leads found matching your search criteria.
                   </td>
                 </tr>
@@ -260,7 +260,7 @@ export function PipelineTableView({
                   <tr
                     key={lead.id}
                     onClick={() => onSelectLead(lead)}
-                    className="hover:bg-slate-900/60 transition-colors cursor-pointer group"
+                    className="hover:bg-zinc-900/60 transition-colors cursor-pointer group"
                   >
                     {/* Company */}
                     <td className="py-3.5 px-4">
@@ -273,7 +273,7 @@ export function PipelineTableView({
                           target="_blank"
                           rel="noreferrer"
                           onClick={(e) => e.stopPropagation()}
-                          className="text-[11px] text-slate-500 hover:text-slate-300 font-mono inline-flex items-center gap-1"
+                          className="text-[11px] text-zinc-500 hover:text-zinc-300 font-mono inline-flex items-center gap-1"
                         >
                           <Globe className="w-2.5 h-2.5" />
                           <span className="truncate max-w-[150px]">{lead.website.replace(/https?:\/\//, "")}</span>
@@ -284,7 +284,7 @@ export function PipelineTableView({
                     {/* Decision Maker */}
                     <td className="py-3.5 px-4">
                       <div>
-                        <span className="font-semibold text-slate-200 block">
+                        <span className="font-semibold text-zinc-200 block">
                           {lead.name}
                         </span>
                         <span className="text-[11px] text-emerald-400 font-medium">
@@ -294,25 +294,25 @@ export function PipelineTableView({
                     </td>
 
                     {/* Contact Info */}
-                    <td className="py-3.5 px-4 font-mono text-[11px] text-slate-400">
+                    <td className="py-3.5 px-4 font-mono text-[11px] text-zinc-400">
                       <div className="space-y-0.5">
                         <div className="flex items-center gap-1.5 truncate max-w-[180px]">
-                          <Mail className="w-3 h-3 text-slate-500 shrink-0" />
+                          <Mail className="w-3 h-3 text-zinc-500 shrink-0" />
                           <span className="truncate">{lead.email}</span>
                         </div>
                         <div className="flex items-center gap-1.5">
-                          <Phone className="w-3 h-3 text-slate-500 shrink-0" />
+                          <Phone className="w-3 h-3 text-zinc-500 shrink-0" />
                           <span>{lead.phone}</span>
                         </div>
                       </div>
                     </td>
 
                     {/* Location */}
-                    <td className="py-3.5 px-4 text-slate-300 text-xs">
+                    <td className="py-3.5 px-4 text-zinc-300 text-xs">
                       <span className="block truncate max-w-[140px]" title={lead.location}>
                         {lead.location}
                       </span>
-                      <span className="text-[10px] text-slate-500">{lead.niche}</span>
+                      <span className="text-[10px] text-zinc-500">{lead.niche}</span>
                     </td>
 
                     {/* Deal Value */}
@@ -352,14 +352,14 @@ export function PipelineTableView({
                       <div className="flex items-center justify-end gap-1.5">
                         <Link
                           href={`/outreach?leadId=${encodeURIComponent(lead.id)}`}
-                          className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-emerald-400 border border-slate-800 transition-colors"
+                          className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-emerald-400 border border-zinc-800 transition-colors"
                           title="Generate cold email copy"
                         >
                           <Send className="w-3.5 h-3.5 text-emerald-400" />
                         </Link>
                         <button
                           onClick={() => onSelectLead(lead)}
-                          className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 transition-colors"
+                          className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 transition-colors"
                           title="View lead profile"
                         >
                           <ExternalLink className="w-3.5 h-3.5" />
@@ -374,14 +374,14 @@ export function PipelineTableView({
         </div>
 
         {/* Pagination Footer */}
-        <div className="p-4 border-t border-slate-800 bg-slate-900/60 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-400">
+        <div className="p-4 border-t border-zinc-800 bg-zinc-900/60 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-zinc-400">
           <div className="flex items-center gap-2">
             <span>
               Showing <strong className="text-white">{(page - 1) * pageSize + 1}</strong> to{" "}
               <strong className="text-white">{Math.min(page * pageSize, filteredLeads.length)}</strong> of{" "}
               <strong className="text-emerald-400">{filteredLeads.length}</strong> total leads
             </span>
-            <span className="text-slate-600">|</span>
+            <span className="text-zinc-600">|</span>
             <div className="flex items-center gap-1.5">
               <span>Per page:</span>
               <select
@@ -390,7 +390,7 @@ export function PipelineTableView({
                   setPageSize(Number(e.target.value));
                   setPage(1);
                 }}
-                className="bg-slate-950 border border-slate-800 text-slate-200 rounded px-2 py-1 text-xs focus:outline-none"
+                className="bg-zinc-950 border border-zinc-800 text-zinc-200 rounded px-2 py-1 text-xs focus:outline-none"
               >
                 <option value={25}>25</option>
                 <option value={50}>50</option>
@@ -404,7 +404,7 @@ export function PipelineTableView({
             <button
               onClick={() => setPage((p) => Math.max(p - 1, 1))}
               disabled={page === 1}
-              className="p-1.5 rounded-lg bg-slate-900 text-slate-400 hover:text-white border border-slate-800 disabled:opacity-40 disabled:hover:text-slate-400 transition-colors"
+              className="p-1.5 rounded-lg bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800 disabled:opacity-40 disabled:hover:text-zinc-400 transition-colors"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
@@ -414,7 +414,7 @@ export function PipelineTableView({
             <button
               onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
               disabled={page === totalPages}
-              className="p-1.5 rounded-lg bg-slate-900 text-slate-400 hover:text-white border border-slate-800 disabled:opacity-40 disabled:hover:text-slate-400 transition-colors"
+              className="p-1.5 rounded-lg bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800 disabled:opacity-40 disabled:hover:text-zinc-400 transition-colors"
             >
               <ChevronRight className="w-4 h-4" />
             </button>

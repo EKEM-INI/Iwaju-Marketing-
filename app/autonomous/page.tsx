@@ -278,9 +278,9 @@ export default function AutonomousPage() {
   return (
     <div className="space-y-6">
       {/* Telemetry Header */}
-      <div className="p-5 rounded-2xl bg-[#09090d] border border-[#1e1e26] flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="p-5 rounded-2xl bg-[#09090b] border border-[#27272a] flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3.5">
-          <div className="w-10 h-10 rounded-xl bg-[#14141c] border border-emerald-500/30 flex items-center justify-center">
+          <div className="w-10 h-10 rounded-xl bg-[#121215] border border-emerald-500/30 flex items-center justify-center">
             <Cpu className="w-5 h-5 text-emerald-400" />
           </div>
           <div>
@@ -297,7 +297,7 @@ export default function AutonomousPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="px-3 py-1.5 rounded-xl bg-[#121218] border border-[#23232c] text-xs font-mono">
+          <div className="px-3 py-1.5 rounded-xl bg-[#121215] border border-[#27272a] text-xs font-mono">
             <span className="text-zinc-500">Research Budget: </span>
             <span className="text-emerald-400 font-bold">${researchBudgetSpent}</span>
             <span className="text-zinc-600"> / $5.00</span>
@@ -307,7 +307,7 @@ export default function AutonomousPage() {
             onClick={() => setAgentRunning(!agentRunning)}
             className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
               agentRunning
-                ? "bg-[#18181f] text-zinc-300 border border-[#272733] hover:bg-[#20202a]"
+                ? "bg-[#18181b] text-zinc-300 border border-[#27272a] hover:bg-[#27272a]"
                 : "bg-emerald-400 text-black hover:bg-emerald-300"
             }`}
           >
@@ -322,7 +322,7 @@ export default function AutonomousPage() {
       </div>
 
       {/* One-Sentence Agent Composer (Comp AI Hallmark) */}
-      <div className="p-5 bg-[#09090d] border border-[#1e1e26] rounded-2xl space-y-3">
+      <div className="p-5 bg-[#09090b] border border-[#27272a] rounded-2xl space-y-3">
         <div className="flex items-center justify-between">
           <span className="text-xs font-mono uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
             <Sparkles className="w-4 h-4 text-emerald-400" />
@@ -337,7 +337,7 @@ export default function AutonomousPage() {
             value={composerPrompt}
             onChange={(e) => setComposerPrompt(e.target.value)}
             placeholder="Describe an autonomous agent in plain English..."
-            className="w-full bg-[#050508] border border-[#23232c] rounded-xl pl-4 pr-24 py-3 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500/50 font-mono"
+            className="w-full bg-[#000000] border border-[#27272a] rounded-xl pl-4 pr-24 py-3 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500/50 font-mono"
           />
           <button
             type="submit"
@@ -358,7 +358,7 @@ export default function AutonomousPage() {
             <button
               key={idx}
               onClick={() => setComposerPrompt(chip)}
-              className="px-2 py-0.5 rounded bg-[#101015] hover:bg-[#181820] text-zinc-400 hover:text-zinc-200 border border-[#202028] transition-colors cursor-pointer"
+              className="px-2 py-0.5 rounded bg-[#121215] hover:bg-[#18181b] text-zinc-400 hover:text-zinc-200 border border-[#27272a] transition-colors cursor-pointer"
             >
               {chip}
             </button>
@@ -394,7 +394,7 @@ export default function AutonomousPage() {
             status: "Leasing",
           },
         ].map((agent, i) => (
-          <div key={i} className="p-4 bg-[#09090d] border border-[#1e1e26] rounded-xl space-y-1.5">
+          <div key={i} className="p-4 bg-[#09090b] border border-[#27272a] rounded-xl space-y-1.5">
             <div className="flex items-center justify-between font-mono text-[10px]">
               <span className="text-zinc-500 uppercase">{agent.title}</span>
               <span className="text-emerald-400 font-semibold">{agent.status}</span>
@@ -407,15 +407,15 @@ export default function AutonomousPage() {
 
       {/* Dual Pane: Monitored Accounts + Live Execution Stream */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        <div className="lg:col-span-5 bg-[#09090d] border border-[#1e1e26] rounded-2xl overflow-hidden flex flex-col">
-          <div className="p-4 border-b border-[#181820] flex items-center justify-between">
+        <div className="lg:col-span-5 bg-[#09090b] border border-[#27272a] rounded-2xl overflow-hidden flex flex-col">
+          <div className="p-4 border-b border-[#18181b] flex items-center justify-between">
             <h3 className="text-xs font-semibold text-zinc-300 font-mono uppercase tracking-wider">
               Autonomous Lease Queue ({accounts.length})
             </h3>
             <span className="text-[10px] font-mono text-emerald-400">claimDue(active)</span>
           </div>
 
-          <div className="divide-y divide-[#14141a] overflow-y-auto max-h-[420px]">
+          <div className="divide-y divide-[#121215] overflow-y-auto max-h-[420px]">
             {accounts.map((acc) => (
               <div
                 key={acc.id}
@@ -425,8 +425,8 @@ export default function AutonomousPage() {
                 }}
                 className={`p-4 cursor-pointer transition-all ${
                   selectedAccount?.id === acc.id
-                    ? "bg-[#12121a] border-l-2 border-emerald-400"
-                    : "hover:bg-[#0e0e14]"
+                    ? "bg-[#121215] border-l-2 border-emerald-400"
+                    : "hover:bg-[#0d0d10]"
                 }`}
               >
                 <div className="flex items-start justify-between">
@@ -434,14 +434,14 @@ export default function AutonomousPage() {
                     <h4 className="text-xs font-semibold text-white">{acc.name}</h4>
                     <p className="text-[11px] font-mono text-zinc-500">{acc.domain}</p>
                   </div>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded border border-[#272733] bg-[#121218] text-zinc-300">
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded border border-[#27272a] bg-[#121215] text-zinc-300">
                     {acc.agentStatus}
                   </span>
                 </div>
 
                 <p className="text-[11px] text-zinc-400 mt-2 line-clamp-1">{acc.lastAction}</p>
 
-                <div className="mt-2 pt-2 border-t border-[#16161e] flex items-center justify-between text-[11px] font-mono text-zinc-500">
+                <div className="mt-2 pt-2 border-t border-[#18181b] flex items-center justify-between text-[11px] font-mono text-zinc-500">
                   <span>Recheck: {acc.nextRecheck}</span>
                   <span className="text-emerald-400 font-semibold">{acc.dealValue}</span>
                 </div>
@@ -450,8 +450,8 @@ export default function AutonomousPage() {
           </div>
         </div>
 
-        <div className="lg:col-span-7 bg-[#09090d] border border-[#1e1e26] rounded-2xl flex flex-col overflow-hidden">
-          <div className="p-4 border-b border-[#181820] flex items-center justify-between">
+        <div className="lg:col-span-7 bg-[#09090b] border border-[#27272a] rounded-2xl flex flex-col overflow-hidden">
+          <div className="p-4 border-b border-[#18181b] flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Terminal className="w-4 h-4 text-emerald-400" />
               <h3 className="text-xs font-semibold text-zinc-300 font-mono uppercase tracking-wider">
@@ -463,7 +463,7 @@ export default function AutonomousPage() {
             </span>
           </div>
 
-          <div className="p-4 bg-[#050508] font-mono text-[11px] space-y-2.5 flex-1 overflow-y-auto max-h-[420px]">
+          <div className="p-4 bg-[#000000] font-mono text-[11px] space-y-2.5 flex-1 overflow-y-auto max-h-[420px]">
             {agentLogs.map((log, i) => (
               <div key={i} className="flex items-start gap-2 leading-relaxed">
                 <span className="text-emerald-500 select-none">›</span>
@@ -494,8 +494,8 @@ export default function AutonomousPage() {
             className="fixed inset-0 bg-black/70 backdrop-blur-xs transition-opacity"
           />
 
-          <div className="relative w-full max-w-xl bg-[#09090c] border-l border-[#22222a] h-full shadow-2xl flex flex-col z-10 overflow-hidden">
-            <div className="p-5 border-b border-[#1b1b22] flex items-center justify-between bg-[#07070a]">
+          <div className="relative w-full max-w-xl bg-[#09090b] border-l border-[#27272a] h-full shadow-2xl flex flex-col z-10 overflow-hidden">
+            <div className="p-5 border-b border-[#18181b] flex items-center justify-between bg-[#050505]">
               <div>
                 <h2 className="text-sm font-semibold text-white">{selectedAccount.name}</h2>
                 <p className="text-xs text-zinc-500 font-mono mt-0.5">
@@ -504,7 +504,7 @@ export default function AutonomousPage() {
               </div>
 
               <div className="flex items-center gap-2">
-                <span className="text-xs font-mono font-semibold text-emerald-400 px-2.5 py-1 rounded bg-[#14141a] border border-[#282833]">
+                <span className="text-xs font-mono font-semibold text-emerald-400 px-2.5 py-1 rounded bg-[#121215] border border-[#27272a]">
                   {selectedAccount.dealValue}
                 </span>
                 <button
@@ -517,26 +517,26 @@ export default function AutonomousPage() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-5 space-y-4 text-xs">
-              <div className="p-3.5 bg-[#0e0e13] border border-[#202028] rounded-xl space-y-1">
+              <div className="p-3.5 bg-[#0d0d10] border border-[#27272a] rounded-xl space-y-1">
                 <span className="text-[10px] uppercase font-mono text-zinc-500">Summary Brief</span>
                 <p className="text-zinc-300 leading-relaxed">{selectedAccount.facts.summary}</p>
               </div>
 
-              <div className="p-3.5 bg-[#0e0e13] border border-[#202028] rounded-xl space-y-2">
+              <div className="p-3.5 bg-[#0d0d10] border border-[#27272a] rounded-xl space-y-2">
                 <span className="text-[10px] uppercase font-mono text-zinc-500">Decision Maker</span>
                 <p className="text-sm font-semibold text-white">{selectedAccount.facts.decisionMaker}</p>
                 <p className="text-zinc-400">{selectedAccount.facts.title}</p>
-                <div className="pt-2 border-t border-[#181820] font-mono text-[11px] text-zinc-300">
+                <div className="pt-2 border-t border-[#18181b] font-mono text-[11px] text-zinc-300">
                   <p>Email: {selectedAccount.facts.email}</p>
                   <p>Phone: {selectedAccount.facts.phone}</p>
                 </div>
               </div>
 
-              <div className="p-3.5 bg-[#0e0e13] border border-[#202028] rounded-xl space-y-2">
+              <div className="p-3.5 bg-[#0d0d10] border border-[#27272a] rounded-xl space-y-2">
                 <span className="text-[10px] uppercase font-mono text-zinc-500">Strict Evidence Ledger</span>
                 <div className="space-y-2">
                   {selectedAccount.evidenceLedger.map((ev) => (
-                    <div key={ev.id} className="p-2.5 bg-[#050508] border border-[#181820] rounded-lg">
+                    <div key={ev.id} className="p-2.5 bg-[#000000] border border-[#18181b] rounded-lg">
                       <div className="flex justify-between font-mono text-[10px] text-emerald-400">
                         <span>{ev.source}</span>
                         <span className="text-zinc-500">{ev.timestamp}</span>
@@ -568,7 +568,7 @@ export default function AutonomousPage() {
                     value={directiveInput}
                     onChange={(e) => setDirectiveInput(e.target.value)}
                     placeholder="Give custom directive for next run..."
-                    className="w-full bg-[#050508] border border-[#23232c] rounded-lg pl-3 pr-9 py-2 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 font-mono"
+                    className="w-full bg-[#000000] border border-[#27272a] rounded-lg pl-3 pr-9 py-2 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-500 font-mono"
                   />
                   <button type="submit" className="absolute right-2 top-2 text-zinc-400 hover:text-white">
                     <Send className="w-3.5 h-3.5" />

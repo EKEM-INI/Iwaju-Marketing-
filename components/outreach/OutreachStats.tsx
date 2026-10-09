@@ -24,10 +24,10 @@ export function OutreachStats() {
   ];
 
   return (
-    <div className="rounded-2xl bg-slate-900/60 border border-slate-800/80 p-5 backdrop-blur-md space-y-4">
+    <div className="rounded-2xl bg-zinc-900/60 border border-zinc-800/80 p-5 backdrop-blur-md space-y-4">
       <div className="flex items-center gap-2">
         <Target className="w-4 h-4 text-emerald-400" />
-        <h4 className="text-xs font-bold uppercase tracking-wider text-slate-200">
+        <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-200">
           Iwaju Outbound Playbook & Heuristics
         </h4>
       </div>
@@ -36,13 +36,13 @@ export function OutreachStats() {
         {tips.map((tip, i) => (
           <div
             key={i}
-            className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 text-xs space-y-1"
+            className="p-3 rounded-xl bg-zinc-950/70 border border-zinc-800 text-xs space-y-1"
           >
-            <div className="font-semibold text-slate-200 flex items-center gap-1.5">
+            <div className="font-semibold text-zinc-200 flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
               <span>{tip.title}</span>
             </div>
-            <p className="text-[11px] text-slate-400 leading-relaxed">
+            <p className="text-[11px] text-zinc-400 leading-relaxed">
               {tip.desc}
             </p>
           </div>
