@@ -27,7 +27,7 @@ interface AuthContextType {
   user: AuthUser | null;
   isLoading: boolean;
   loginWithGoogle: (customEmail?: string, customName?: string) => Promise<void>;
-  registerWithEmail: (name: string, email: string, password: string) => Promise<{ code: string }>;
+  registerWithEmail: (name: string, email: string, password: string) => Promise<{ code: string; emailSent: boolean; message?: string }>;
   verifyEmailCode: (email: string, code: string) => Promise<boolean>;
   loginWithEmail: (email: string, password: string) => Promise<boolean>;
   resendVerificationCode: (email: string) => Promise<string>;
@@ -39,7 +39,6 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const AUTH_STORAGE_KEY = "iwaju_auth_user_v1";
 const ACCOUNTS_STORAGE_KEY = "iwaju_registered_accounts_v1";
 
-// Helper to decode Google JWT token
 function parseJwt(token: string) {
   try {
     const base64Url = token.split(".")[1];
@@ -60,7 +59,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // Load existing session
   useEffect(() => {
     try {
       const stored = localStorage.getItem(AUTH_STORAGE_KEY);
@@ -74,13 +72,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Google OAuth Login
   const loginWithGoogle = async (customEmail?: string, customName?: string) => {
     setIsLoading(true);
     try {
       const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
 
-      // If Google Client ID is configured, try Google Identity Services prompt
       if (typeof window !== "undefined" && clientId && (window as any).google?.accounts?.id) {
         return new Promise<void>((resolve, reject) => {
           try {
@@ -111,7 +107,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
             (window as any).google.accounts.id.prompt((notification: any) => {
               if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-                // Fallback to one-click sign in if one-tap is blocked by browser
                 completeDirectGoogleLogin(customEmail, customName);
                 resolve();
               }
@@ -123,7 +118,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
       }
 
-      // Direct verified Google Login fallback
       completeDirectGoogleLogin(customEmail, customName);
     } catch (error) {
       console.error("Google authentication error:", error);
@@ -149,7 +143,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(authenticatedUser);
   };
 
-  // Register with Email & Password
+  // Register with Email: generates code and dispatches real email
   const registerWithEmail = async (name: string, email: string, password: string) => {
     const normalizedEmail = email.trim().toLowerCase();
     const stored = localStorage.getItem(ACCOUNTS_STORAGE_KEY);
@@ -160,29 +154,50 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error("An account with this email already exists. Please sign in.");
     }
 
-    // Generate 6-digit verification code
+    // 6-digit verification code
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
 
     const newAccount: StoredAccount = {
       id: `acc-${Date.now()}`,
       name: name.trim(),
       email: normalizedEmail,
-      passwordHash: btoa(password), // Base64 encoding for client storage
+      passwordHash: btoa(password),
       verified: false,
       verificationCode,
       avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name.trim())}&backgroundColor=059669,10b981`,
       createdAt: new Date().toISOString(),
     };
 
-    // Filter out old unverified attempt if exists
     const updated = accounts.filter((a) => a.email.toLowerCase() !== normalizedEmail);
     updated.push(newAccount);
     localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(updated));
 
-    return { code: verificationCode };
+    // Dispatch real email via serverless route
+    let emailSent = false;
+    let message = "";
+    try {
+      const emailRes = await fetch("/api/auth/send-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: normalizedEmail,
+          code: verificationCode,
+          name: name.trim(),
+        }),
+      });
+      const emailData = await emailRes.json();
+      if (emailRes.ok && emailData.success) {
+        emailSent = true;
+      } else if (emailData.notice === "RESEND_API_KEY_NOT_SET") {
+        message = "To send directly to external inboxes, add RESEND_API_KEY in Vercel.";
+      }
+    } catch (e) {
+      console.warn("Could not dispatch email:", e);
+    }
+
+    return { code: verificationCode, emailSent, message };
   };
 
-  // Verify Email Code
   const verifyEmailCode = async (email: string, code: string): Promise<boolean> => {
     const normalizedEmail = email.trim().toLowerCase();
     const stored = localStorage.getItem(ACCOUNTS_STORAGE_KEY);
@@ -194,15 +209,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (account.verificationCode !== code.trim()) {
-      throw new Error("Invalid verification code. Please check your code and try again.");
+      throw new Error("Invalid verification code. Please check your email inbox and enter the 6-digit code.");
     }
 
-    // Mark as verified
     account.verified = true;
     delete account.verificationCode;
     localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(accounts));
 
-    // Sign in user
     const authenticatedUser: AuthUser = {
       id: account.id,
       name: account.name,
@@ -218,7 +231,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return true;
   };
 
-  // Login with Email & Password
   const loginWithEmail = async (email: string, password: string): Promise<boolean> => {
     const normalizedEmail = email.trim().toLowerCase();
     const stored = localStorage.getItem(ACCOUNTS_STORAGE_KEY);
@@ -252,7 +264,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return true;
   };
 
-  // Resend Verification Code
   const resendVerificationCode = async (email: string): Promise<string> => {
     const normalizedEmail = email.trim().toLowerCase();
     const stored = localStorage.getItem(ACCOUNTS_STORAGE_KEY);
@@ -264,6 +275,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const newCode = Math.floor(100000 + Math.random() * 900000).toString();
     account.verificationCode = newCode;
     localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(accounts));
+
+    // Dispatch real email via serverless route
+    try {
+      await fetch("/api/auth/send-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: normalizedEmail,
+          code: newCode,
+          name: account.name,
+        }),
+      });
+    } catch (e) {
+      console.warn("Could not resend email:", e);
+    }
+
     return newCode;
   };
 

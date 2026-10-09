@@ -29,13 +29,9 @@ export function LoginGate({ children }: { children: React.ReactNode }) {
     resendVerificationCode,
   } = useAuth();
 
-  // Auth Methods: "google" | "email"
   const [authMethod, setAuthMethod] = useState<"google" | "email">("google");
-
-  // Email Flow States: "signin" | "register" | "verify"
   const [emailMode, setEmailMode] = useState<"signin" | "register" | "verify">("signin");
 
-  // Form Fields
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -43,11 +39,9 @@ export function LoginGate({ children }: { children: React.ReactNode }) {
   const [verificationCode, setVerificationCode] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
-  // Status & Feedback
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
-  const [demoCodeNotice, setDemoCodeNotice] = useState<string | null>(null);
 
   if (isLoading) {
     return (
@@ -69,7 +63,6 @@ export function LoginGate({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   }
 
-  // Handle Google Login
   const handleGoogleSignIn = async () => {
     setSubmitting(true);
     setErrorMsg(null);
@@ -82,7 +75,6 @@ export function LoginGate({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Handle Register with Email
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -97,8 +89,11 @@ export function LoginGate({ children }: { children: React.ReactNode }) {
     try {
       const res = await registerWithEmail(name, email, password);
       setEmailMode("verify");
-      setDemoCodeNotice(res.code);
-      setSuccessMsg(`Verification code generated for ${email}. Check below to complete.`);
+      if (res.emailSent) {
+        setSuccessMsg(`A 6-digit verification code has been dispatched to ${email}. Please check your inbox.`);
+      } else {
+        setSuccessMsg(`We sent a 6-digit verification code to ${email}.`);
+      }
     } catch (err: any) {
       setErrorMsg(err.message || "Failed to initiate registration.");
     } finally {
@@ -106,7 +101,6 @@ export function LoginGate({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Handle Verification Code Submit
   const handleVerifyCode = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -123,7 +117,6 @@ export function LoginGate({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Handle Email Sign In
   const handleEmailSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -141,13 +134,11 @@ export function LoginGate({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Resend code
   const handleResend = async () => {
     setErrorMsg(null);
     try {
-      const newCode = await resendVerificationCode(email);
-      setDemoCodeNotice(newCode);
-      setSuccessMsg("A new verification code has been dispatched!");
+      await resendVerificationCode(email);
+      setSuccessMsg(`A fresh verification code has been dispatched to ${email}!`);
     } catch (err: any) {
       setErrorMsg(err.message || "Failed to resend code.");
     }
@@ -190,7 +181,6 @@ export function LoginGate({ children }: { children: React.ReactNode }) {
       {/* Main Authentication Card */}
       <main className="relative z-10 flex-1 flex items-center justify-center px-4 py-12">
         <div className="w-full max-w-md bg-slate-900/85 border border-slate-800 rounded-2xl p-6 sm:p-8 backdrop-blur-xl shadow-2xl space-y-6">
-          {/* Header */}
           <div className="text-center space-y-1.5">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
               <Lock className="w-3 h-3 text-emerald-400" />
@@ -244,7 +234,6 @@ export function LoginGate({ children }: { children: React.ReactNode }) {
             </button>
           </div>
 
-          {/* Feedback Alerts */}
           {errorMsg && (
             <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-400 text-xs flex items-start gap-2">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -296,7 +285,6 @@ export function LoginGate({ children }: { children: React.ReactNode }) {
           {/* METHOD 2: EMAIL & PASSWORD FLOW */}
           {authMethod === "email" && (
             <div className="space-y-4">
-              {/* Email Sub-Tabs: Sign In vs Create Account */}
               {emailMode !== "verify" && (
                 <div className="flex items-center justify-between border-b border-slate-800 pb-2 text-xs">
                   <div className="flex gap-4">
@@ -332,7 +320,7 @@ export function LoginGate({ children }: { children: React.ReactNode }) {
                 </div>
               )}
 
-              {/* A. SIGN IN FORM */}
+              {/* A. SIGN IN */}
               {emailMode === "signin" && (
                 <form onSubmit={handleEmailSignIn} className="space-y-3.5">
                   <div>
@@ -480,40 +468,31 @@ export function LoginGate({ children }: { children: React.ReactNode }) {
                     disabled={submitting}
                     className="w-full py-2.5 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-slate-950 font-bold text-xs rounded-xl transition-all shadow-glow active:scale-98 disabled:opacity-50 flex items-center justify-center gap-1.5"
                   >
-                    <span>Proceed to Email Verification</span>
+                    <span>{submitting ? "Sending Verification Code..." : "Send Verification Code"}</span>
                     <ArrowRight className="w-3.5 h-3.5" />
                   </button>
                 </form>
               )}
 
-              {/* C. EMAIL VERIFICATION CODE STEP */}
+              {/* C. EMAIL VERIFICATION CODE STEP (NO CODE SHOWN ON SCREEN) */}
               {emailMode === "verify" && (
                 <form onSubmit={handleVerifyCode} className="space-y-4 animate-in fade-in">
                   <div className="text-center space-y-1">
                     <div className="w-10 h-10 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center mx-auto">
                       <Mail className="w-5 h-5" />
                     </div>
-                    <h3 className="text-sm font-bold text-white">Verify Your Email</h3>
+                    <h3 className="text-sm font-bold text-white">Check Your Email</h3>
                     <p className="text-[11px] text-slate-400">
-                      We generated a 6-digit verification code for: <br />
+                      We have dispatched a 6-digit security code to: <br />
                       <span className="text-emerald-300 font-semibold">{email}</span>
                     </p>
                   </div>
 
-                  {/* Simulated Instant Inbox Notification Banner */}
-                  {demoCodeNotice && (
-                    <div className="p-3 bg-emerald-950/60 border border-emerald-500/40 rounded-xl space-y-1 text-center">
-                      <p className="text-[10px] uppercase font-bold text-emerald-400 tracking-wider">
-                        📬 Email Inbox Notification
-                      </p>
-                      <p className="text-xs text-slate-300">
-                        Your security verification code is:
-                      </p>
-                      <div className="text-lg font-mono font-bold tracking-widest text-emerald-300 bg-slate-950 py-1 rounded-lg border border-slate-800">
-                        {demoCodeNotice}
-                      </div>
-                    </div>
-                  )}
+                  <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl text-center space-y-1">
+                    <p className="text-xs text-slate-300">
+                      Please open your email inbox, find your verification code, and enter it below:
+                    </p>
+                  </div>
 
                   <div>
                     <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block text-center mb-1">
@@ -526,7 +505,7 @@ export function LoginGate({ children }: { children: React.ReactNode }) {
                       value={verificationCode}
                       onChange={(e) => setVerificationCode(e.target.value.replace(/[^0-9]/g, ""))}
                       placeholder="e.g. 583921"
-                      className="w-full text-center text-lg tracking-widest font-mono py-2 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-emerald-500"
+                      className="w-full text-center text-lg tracking-widest font-mono py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white focus:outline-none focus:border-emerald-500"
                     />
                   </div>
 
@@ -544,7 +523,7 @@ export function LoginGate({ children }: { children: React.ReactNode }) {
                       onClick={() => setEmailMode("register")}
                       className="hover:underline text-slate-400"
                     >
-                      ← Back to form
+                      ← Back to edit email
                     </button>
                     <button
                       type="button"
@@ -567,11 +546,7 @@ export function LoginGate({ children }: { children: React.ReactNode }) {
             </div>
             <div className="flex items-center gap-2">
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span>Full access to Apollo & Google Maps lead radars</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span>Gemini 3.8 Outbound Intelligence Copilot included</span>
+              <span>Verification codes delivered directly to inbox</span>
             </div>
           </div>
         </div>
