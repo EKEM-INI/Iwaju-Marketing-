@@ -23,14 +23,21 @@ export interface StoredAccount {
   createdAt: string;
 }
 
+interface RegisterResult {
+  code: string;
+  emailSent: boolean;
+  error?: string;
+  isRestricted?: boolean;
+}
+
 interface AuthContextType {
   user: AuthUser | null;
   isLoading: boolean;
   loginWithGoogle: (customEmail?: string, customName?: string) => Promise<void>;
-  registerWithEmail: (name: string, email: string, password: string) => Promise<{ code: string; emailSent: boolean; message?: string }>;
+  registerWithEmail: (name: string, email: string, password: string) => Promise<RegisterResult>;
   verifyEmailCode: (email: string, code: string) => Promise<boolean>;
   loginWithEmail: (email: string, password: string) => Promise<boolean>;
-  resendVerificationCode: (email: string) => Promise<string>;
+  resendVerificationCode: (email: string) => Promise<RegisterResult>;
   logout: () => void;
 }
 
@@ -143,8 +150,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(authenticatedUser);
   };
 
-  // Register with Email: generates code and dispatches real email
-  const registerWithEmail = async (name: string, email: string, password: string) => {
+  const registerWithEmail = async (name: string, email: string, password: string): Promise<RegisterResult> => {
     const normalizedEmail = email.trim().toLowerCase();
     const stored = localStorage.getItem(ACCOUNTS_STORAGE_KEY);
     const accounts: StoredAccount[] = stored ? JSON.parse(stored) : [];
@@ -154,7 +160,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error("An account with this email already exists. Please sign in.");
     }
 
-    // 6-digit verification code
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
 
     const newAccount: StoredAccount = {
@@ -172,9 +177,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     updated.push(newAccount);
     localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(updated));
 
-    // Dispatch real email via serverless route
     let emailSent = false;
-    let message = "";
+    let emailError: string | undefined = undefined;
+    let isRestricted = false;
+
     try {
       const emailRes = await fetch("/api/auth/send-code", {
         method: "POST",
@@ -186,16 +192,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }),
       });
       const emailData = await emailRes.json();
-      if (emailRes.ok && emailData.success) {
+      if (emailData.success) {
         emailSent = true;
-      } else if (emailData.notice === "RESEND_API_KEY_NOT_SET") {
-        message = "To send directly to external inboxes, add RESEND_API_KEY in Vercel.";
+      } else {
+        emailError = emailData.error;
+        isRestricted = Boolean(emailData.isRestrictedAccount);
       }
-    } catch (e) {
-      console.warn("Could not dispatch email:", e);
+    } catch (e: any) {
+      emailError = e.message || "Failed to contact email dispatch API.";
     }
 
-    return { code: verificationCode, emailSent, message };
+    return { code: verificationCode, emailSent, error: emailError, isRestricted };
   };
 
   const verifyEmailCode = async (email: string, code: string): Promise<boolean> => {
@@ -264,7 +271,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return true;
   };
 
-  const resendVerificationCode = async (email: string): Promise<string> => {
+  const resendVerificationCode = async (email: string): Promise<RegisterResult> => {
     const normalizedEmail = email.trim().toLowerCase();
     const stored = localStorage.getItem(ACCOUNTS_STORAGE_KEY);
     const accounts: StoredAccount[] = stored ? JSON.parse(stored) : [];
@@ -276,9 +283,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     account.verificationCode = newCode;
     localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(accounts));
 
-    // Dispatch real email via serverless route
+    let emailSent = false;
+    let emailError: string | undefined = undefined;
+    let isRestricted = false;
+
     try {
-      await fetch("/api/auth/send-code", {
+      const emailRes = await fetch("/api/auth/send-code", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -287,11 +297,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           name: account.name,
         }),
       });
-    } catch (e) {
-      console.warn("Could not resend email:", e);
+      const emailData = await emailRes.json();
+      if (emailData.success) {
+        emailSent = true;
+      } else {
+        emailError = emailData.error;
+        isRestricted = Boolean(emailData.isRestrictedAccount);
+      }
+    } catch (e: any) {
+      emailError = e.message;
     }
 
-    return newCode;
+    return { code: newCode, emailSent, error: emailError, isRestricted };
   };
 
   const logout = () => {

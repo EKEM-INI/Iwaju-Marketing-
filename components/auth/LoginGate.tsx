@@ -42,6 +42,11 @@ export function LoginGate({ children }: { children: React.ReactNode }) {
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [deliveryIssue, setDeliveryIssue] = useState<{
+    error?: string;
+    code?: string;
+    isRestricted?: boolean;
+  } | null>(null);
 
   if (isLoading) {
     return (
@@ -79,6 +84,7 @@ export function LoginGate({ children }: { children: React.ReactNode }) {
     e.preventDefault();
     setErrorMsg(null);
     setSuccessMsg(null);
+    setDeliveryIssue(null);
 
     if (!name.trim()) return setErrorMsg("Please enter your full name.");
     if (!email.trim() || !email.includes("@")) return setErrorMsg("Please enter a valid work email.");
@@ -89,10 +95,15 @@ export function LoginGate({ children }: { children: React.ReactNode }) {
     try {
       const res = await registerWithEmail(name, email, password);
       setEmailMode("verify");
+
       if (res.emailSent) {
-        setSuccessMsg(`A 6-digit verification code has been dispatched to ${email}. Please check your inbox.`);
+        setSuccessMsg(`We sent a 6-digit verification code to ${email}. Please check your inbox and spam folder.`);
       } else {
-        setSuccessMsg(`We sent a 6-digit verification code to ${email}.`);
+        setDeliveryIssue({
+          error: res.error,
+          code: res.code,
+          isRestricted: res.isRestricted,
+        });
       }
     } catch (err: any) {
       setErrorMsg(err.message || "Failed to initiate registration.");
@@ -136,9 +147,18 @@ export function LoginGate({ children }: { children: React.ReactNode }) {
 
   const handleResend = async () => {
     setErrorMsg(null);
+    setDeliveryIssue(null);
     try {
-      await resendVerificationCode(email);
-      setSuccessMsg(`A fresh verification code has been dispatched to ${email}!`);
+      const res = await resendVerificationCode(email);
+      if (res.emailSent) {
+        setSuccessMsg(`A fresh verification code has been dispatched to ${email}!`);
+      } else {
+        setDeliveryIssue({
+          error: res.error,
+          code: res.code,
+          isRestricted: res.isRestricted,
+        });
+      }
     } catch (err: any) {
       setErrorMsg(err.message || "Failed to resend code.");
     }
@@ -201,6 +221,7 @@ export function LoginGate({ children }: { children: React.ReactNode }) {
               onClick={() => {
                 setAuthMethod("google");
                 setErrorMsg(null);
+                setDeliveryIssue(null);
               }}
               className={`py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-2 ${
                 authMethod === "google"
@@ -222,6 +243,7 @@ export function LoginGate({ children }: { children: React.ReactNode }) {
               onClick={() => {
                 setAuthMethod("email");
                 setErrorMsg(null);
+                setDeliveryIssue(null);
               }}
               className={`py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-2 ${
                 authMethod === "email"
@@ -293,6 +315,7 @@ export function LoginGate({ children }: { children: React.ReactNode }) {
                       onClick={() => {
                         setEmailMode("signin");
                         setErrorMsg(null);
+                        setDeliveryIssue(null);
                       }}
                       className={`font-bold pb-1 transition-colors relative ${
                         emailMode === "signin"
@@ -307,6 +330,7 @@ export function LoginGate({ children }: { children: React.ReactNode }) {
                       onClick={() => {
                         setEmailMode("register");
                         setErrorMsg(null);
+                        setDeliveryIssue(null);
                       }}
                       className={`font-bold pb-1 transition-colors relative ${
                         emailMode === "register"
@@ -474,7 +498,7 @@ export function LoginGate({ children }: { children: React.ReactNode }) {
                 </form>
               )}
 
-              {/* C. EMAIL VERIFICATION CODE STEP (NO CODE SHOWN ON SCREEN) */}
+              {/* C. EMAIL VERIFICATION CODE STEP */}
               {emailMode === "verify" && (
                 <form onSubmit={handleVerifyCode} className="space-y-4 animate-in fade-in">
                   <div className="text-center space-y-1">
@@ -488,11 +512,39 @@ export function LoginGate({ children }: { children: React.ReactNode }) {
                     </p>
                   </div>
 
-                  <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl text-center space-y-1">
-                    <p className="text-xs text-slate-300">
-                      Please open your email inbox, find your verification code, and enter it below:
-                    </p>
-                  </div>
+                  {/* If email delivery had a restriction or API issue */}
+                  {deliveryIssue && (
+                    <div className="p-3 bg-amber-500/10 border border-amber-500/25 rounded-xl text-xs space-y-2 text-left">
+                      <div className="flex items-center gap-1.5 text-amber-400 font-semibold text-[11px]">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                        <span>Email Delivery Feedback</span>
+                      </div>
+                      <p className="text-[11px] text-slate-300 leading-relaxed">
+                        {deliveryIssue.error}
+                      </p>
+                      {deliveryIssue.isRestricted && (
+                        <p className="text-[10px] text-amber-300/80">
+                          Tip: On Resend's free tier, emails can only be sent to the email address registered with your Resend account, or add your verified domain on resend.com.
+                        </p>
+                      )}
+                      {deliveryIssue.code && (
+                        <div className="pt-2 border-t border-amber-500/20 flex items-center justify-between text-[11px]">
+                          <span className="text-slate-400">Testing Code:</span>
+                          <span className="font-mono font-bold text-emerald-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+                            {deliveryIssue.code}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {!deliveryIssue && (
+                    <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl text-center space-y-1">
+                      <p className="text-xs text-slate-300">
+                        Please open your email inbox, find your verification code, and enter it below:
+                      </p>
+                    </div>
+                  )}
 
                   <div>
                     <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block text-center mb-1">
