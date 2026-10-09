@@ -12,6 +12,8 @@ import {
   TrendingUp,
   ShieldCheck,
   RotateCcw,
+  Cpu,
+  Bot,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { resetToSeedData } from "@/lib/storage";
@@ -23,6 +25,13 @@ const NAV_ITEMS = [
     href: "/",
     icon: LayoutDashboard,
     badge: null,
+  },
+  {
+    name: "Autonomous AI Mode",
+    href: "/autonomous",
+    icon: Cpu,
+    badge: "Eve Agent",
+    highlight: true,
   },
   {
     name: "Lead Prospecting",
@@ -80,40 +89,36 @@ export function Sidebar({ className, onNavigate }: SidebarProps) {
             </div>
             <div>
               <div className="flex items-center gap-1.5">
-                <span className="font-bold text-lg tracking-tight text-white group-hover:text-emerald-400 transition-colors">
+                <span className="font-bold text-base tracking-tight text-white group-hover:text-emerald-400 transition-colors">
                   Iwaju
                 </span>
-                <span className="text-xs uppercase font-extrabold tracking-widest text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
-                  OS
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  Agentic
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400 font-medium">B2B Lead & Pipeline Engine</p>
+              <p className="text-xs text-slate-400 font-medium">B2B Outbound Engine</p>
             </div>
           </Link>
         </div>
 
-        {/* Navigation Items */}
-        <div className="px-3 py-6 space-y-1">
-          <p className="px-3 text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">
-            Core Modules
+        {/* Navigation Links */}
+        <nav className="p-4 space-y-1">
+          <p className="px-3 text-[10px] font-mono uppercase tracking-wider text-slate-500 mb-2">
+            Workspace
           </p>
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
-            const isActive =
-              item.href === "/"
-                ? pathname === "/"
-                : pathname?.startsWith(item.href);
-
+            const isActive = pathname === item.href;
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 onClick={onNavigate}
                 className={cn(
-                  "flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 group relative",
+                  "flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition-all group relative",
                   isActive
-                    ? "bg-emerald-500/15 text-emerald-300 font-semibold shadow-[inset_0_1px_0_0_rgba(255,255,255,0.1)] border border-emerald-500/30"
-                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-900/60 border border-transparent"
+                    ? "bg-slate-900 text-white font-semibold shadow-inner border border-slate-800/80"
+                    : "text-slate-400 hover:text-white hover:bg-slate-900/50"
                 )}
               >
                 <div className="flex items-center gap-3">
@@ -122,7 +127,7 @@ export function Sidebar({ className, onNavigate }: SidebarProps) {
                       "w-4 h-4 transition-colors",
                       isActive
                         ? "text-emerald-400"
-                        : "text-slate-400 group-hover:text-slate-200"
+                        : "text-slate-400 group-hover:text-emerald-400"
                     )}
                   />
                   <span>{item.name}</span>
@@ -130,10 +135,12 @@ export function Sidebar({ className, onNavigate }: SidebarProps) {
                 {item.badge && (
                   <span
                     className={cn(
-                      "text-[10px] px-1.5 py-0.5 rounded-md font-mono transition-colors",
-                      isActive
-                        ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                        : "bg-slate-900 text-slate-500 border border-slate-800"
+                      "text-[9px] font-mono px-1.5 py-0.5 rounded transition-colors",
+                      item.highlight
+                        ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 animate-pulse"
+                        : isActive
+                        ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                        : "bg-slate-900 text-slate-400 border border-slate-800 group-hover:border-slate-700"
                     )}
                   >
                     {item.badge}
@@ -142,35 +149,25 @@ export function Sidebar({ className, onNavigate }: SidebarProps) {
               </Link>
             );
           })}
-        </div>
+        </nav>
       </div>
 
-      {/* Bottom Status Card */}
+      {/* Bottom Status / Reset */}
       <div className="p-4 border-t border-slate-800/80 space-y-3">
-        <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800/90 flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-200">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-              Engine Online
+        <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/80 text-xs">
+          <div className="flex items-center justify-between font-mono text-[11px] text-slate-400">
+            <span className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Agent Work Queue
             </span>
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-            </span>
+            <span className="text-emerald-400 font-semibold">Active</span>
           </div>
-          <p className="text-[11px] text-slate-400 leading-snug">
-            Prospecting radar active. Local storage sync enabled.
-          </p>
-          <div className="flex items-center justify-between pt-1 border-t border-slate-800/60 text-[10px] text-slate-500">
-            <span>Accuracy 98.4%</span>
-            <span>Vercel Ready</span>
-          </div>
+          <p className="text-[11px] text-slate-500 mt-1">Autonomous 24/7 background lease loops</p>
         </div>
 
         <button
           onClick={handleReset}
-          className="w-full flex items-center justify-center gap-2 py-2 px-3 text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-900 rounded-lg border border-slate-800/60 transition-colors"
-          title="Restore standard seed leads"
+          className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-900/80 border border-transparent hover:border-slate-800 transition-all cursor-pointer"
         >
           <RotateCcw className="w-3.5 h-3.5" />
           <span>Reset Demo Data</span>
