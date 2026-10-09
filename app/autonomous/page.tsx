@@ -11,6 +11,7 @@ import {
   Send,
   CheckCheck,
   Check,
+  CheckCircle2,
   X,
   ExternalLink,
   Database,
@@ -26,7 +27,7 @@ import {
   Edit3,
 } from "lucide-react";
 import { getStoredLeads, saveSingleLead, logActivity, saveLeads } from "@/lib/storage";
-import { Lead, FactItem, AutonomousAccount } from "@/types";
+import { Lead, FactItem, AutonomousAccount, AISortResult, AIComposedEmail, EvaluatedLead } from "@/types";
 
 const INITIAL_FACTS: FactItem[] = [
   // Apex Prime Realty
@@ -404,6 +405,20 @@ export default function AutonomousPage() {
   const [editingFactId, setEditingFactId] = useState<string | null>(null);
   const [editFactValue, setEditFactValue] = useState<string>("");
   const [notificationBanner, setNotificationBanner] = useState<{ message: string; type: "success" | "info" | "warn" } | null>(null);
+  // ChatGPT Brain States
+  const [brainProvider, setBrainProvider] = useState<string>("ChatGPT Brain");
+  const [isLiveChatGPT, setIsLiveChatGPT] = useState<boolean>(true);
+  const [isAiSortingOpen, setIsAiSortingOpen] = useState<boolean>(false);
+  const [isAiSortingLoading, setIsAiSortingLoading] = useState<boolean>(false);
+  const [aiSortResult, setAiSortResult] = useState<AISortResult | null>(null);
+
+  // ChatGPT Cold Email Composer State
+  const [isAiEmailOpen, setIsAiEmailOpen] = useState<boolean>(false);
+  const [isAiEmailLoading, setIsAiEmailLoading] = useState<boolean>(false);
+  const [emailTargetLead, setEmailTargetLead] = useState<any | null>(null);
+  const [composedEmail, setComposedEmail] = useState<AIComposedEmail | null>(null);
+  const [emailAngle, setEmailAngle] = useState<string>("value_led");
+  const [copiedEmail, setCopiedEmail] = useState<boolean>(false);
 
   const [agentLogs, setAgentLogs] = useState<string[]>([
     "[DISPATCH] Work queue leased 4 accounts with FOR UPDATE SKIP LOCKED",
@@ -434,6 +449,24 @@ export default function AutonomousPage() {
       ...prev,
     ]);
 
+    try {
+      const brainRes = await fetch("/api/autonomous/brain", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetNiche: niche, targetCity: city, batchSize: 2 }),
+      });
+      const brainData = await brainRes.json();
+      if (brainData?.success) {
+        setBrainProvider(brainData.provider || "ChatGPT Brain");
+        setIsLiveChatGPT(Boolean(brainData.isLiveChatGPT));
+        setAgentLogs((prev) => [
+          `[BRAIN] Connected to ${brainData.provider} (${brainData.isLiveChatGPT ? "Live ChatGPT API" : "Intelligent Engine"})`,
+          ...prev,
+        ]);
+      }
+    } catch {
+      // continue
+    }
     const isFintech = niche.toLowerCase().includes("fintech") || niche.toLowerCase().includes("pay");
     const isHVAC = niche.toLowerCase().includes("hvac") || niche.toLowerCase().includes("mechanical") || niche.toLowerCase().includes("cool");
     const isLegal = niche.toLowerCase().includes("law") || niche.toLowerCase().includes("legal");
@@ -954,6 +987,84 @@ export default function AutonomousPage() {
     });
   };
 
+  
+  const handleOpenAiSort = async () => {
+    setIsAiSortingOpen(true);
+    setIsAiSortingLoading(true);
+    try {
+      const stored = getStoredLeads();
+      const res = await fetch("/api/leads/ai-sort", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leads: stored, sortBy: "deal_potential" }),
+      });
+      const data = await res.json();
+      if (data && data.sortedLeads) {
+        setAiSortResult(data);
+        if (data.provider) setBrainProvider(data.provider);
+        if (typeof data.isLiveChatGPT === "boolean") setIsLiveChatGPT(data.isLiveChatGPT);
+      }
+    } catch (err) {
+      console.warn("AI sort failed:", err);
+    } finally {
+      setIsAiSortingLoading(false);
+    }
+  };
+
+  const handleOpenAiEmail = async (accountOrLead: any) => {
+    setEmailTargetLead(accountOrLead);
+    setIsAiEmailOpen(true);
+    setIsAiEmailLoading(true);
+    try {
+      const leadPayload = {
+        id: accountOrLead.id,
+        name: accountOrLead.facts?.decisionMaker || accountOrLead.name || "Executive Officer",
+        title: accountOrLead.facts?.title || accountOrLead.title || "Managing Director",
+        company: accountOrLead.name || accountOrLead.company,
+        email: accountOrLead.facts?.email || accountOrLead.email,
+        phone: accountOrLead.facts?.phone || accountOrLead.phone,
+        niche: accountOrLead.niche || targetNiche,
+        location: accountOrLead.location || targetCity,
+        dealValue: accountOrLead.rawDealValue || accountOrLead.dealValue || 20000000,
+        facts: accountOrLead.evidenceLedger || [],
+      };
+      const res = await fetch("/api/outreach/ai-compose", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lead: leadPayload,
+          angle: emailAngle,
+          facts: accountOrLead.evidenceLedger || [],
+        }),
+      });
+      const data = await res.json();
+      if (data && data.subject && data.body) {
+        setComposedEmail(data);
+      }
+    } catch (err) {
+      console.warn("AI email compose failed:", err);
+    } finally {
+      setIsAiEmailLoading(false);
+    }
+  };
+
+  const handleApplyAiSortToPipeline = () => {
+    if (!aiSortResult || !aiSortResult.sortedLeads) return;
+    const current = getStoredLeads();
+    const rankMap = new Map(aiSortResult.sortedLeads.map((s) => [s.leadId, s.rank]));
+    const reordered = [...current].sort((a, b) => {
+      const rankA = rankMap.get(a.id) ?? 999;
+      const rankB = rankMap.get(b.id) ?? 999;
+      return rankA - rankB;
+    });
+    saveLeads(reordered);
+    setNotificationBanner({
+      message: "ChatGPT Brain triage applied! Pipeline re-ordered by AI commercial priority.",
+      type: "success",
+    });
+    setIsAiSortingOpen(false);
+  };
+
   const handleSaveEditedSuggestion = (factId: string) => {
     if (!editFactValue.trim()) return;
     handleApproveSuggestion(factId, editFactValue.trim());
@@ -1006,18 +1117,34 @@ export default function AutonomousPage() {
           </div>
         </div>
 
-        {/* Counter Badges */}
-        <div className="flex items-center gap-3 text-xs font-mono">
+        {/* Counter Badges & ChatGPT Brain */}
+        <div className="flex flex-wrap items-center gap-3 text-xs font-mono">
+          <div className="px-3 py-1.5 rounded-lg bg-[#121215] border border-emerald-500/40 flex items-center gap-2">
+            <Bot className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="text-zinc-400">Brain:</span>
+            <span className="text-emerald-400 font-semibold flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              {brainProvider}
+            </span>
+          </div>
+          <button
+            onClick={handleOpenAiSort}
+            disabled={isAiSortingLoading}
+            className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700 flex items-center gap-1.5 text-xs font-semibold cursor-pointer transition-colors"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+            <span>{isAiSortingLoading ? "Sorting Leads..." : "Sort Leads with ChatGPT"}</span>
+          </button>
           <div className="px-3 py-1.5 rounded-lg bg-[#121215] border border-[#27272a] flex items-center gap-2">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="text-zinc-400">Strong (Auto-Applied):</span>
+            <span className="text-zinc-400">Strong:</span>
             <span className="text-emerald-400 font-semibold">
               {facts.filter((f) => f.status === "auto_applied").length}
             </span>
           </div>
           <div className="px-3 py-1.5 rounded-lg bg-[#121215] border border-[#27272a] flex items-center gap-2">
             <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
-            <span className="text-zinc-400">Suggestions Queued:</span>
+            <span className="text-zinc-400">Suggestions:</span>
             <span className="text-amber-400 font-semibold">
               {facts.filter((f) => f.status === "pending_approval").length}
             </span>
@@ -1664,6 +1791,297 @@ export default function AutonomousPage() {
           </div>
         </div>
       )}
+    
+      {/* CHATGPT LEAD SORTING DRAWER */}
+      {isAiSortingOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="relative w-full max-w-3xl max-h-[90vh] bg-[#09090b] border border-[#27272a] rounded-2xl flex flex-col overflow-hidden shadow-2xl">
+            <div className="p-5 border-b border-[#27272a] flex items-center justify-between bg-[#0d0d10]">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center">
+                  <Sparkles className="w-4 h-4 text-emerald-400" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-bold text-white">ChatGPT Lead Sorting & Qualification</h3>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-950/60 text-emerald-400 border border-emerald-500/30">
+                      {aiSortResult?.provider || "ChatGPT Brain"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-400 font-mono mt-0.5">
+                    Autonomous qualification, commercial triage & buying signal ranking
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsAiSortingOpen(false)}
+                className="p-1 rounded-lg text-zinc-500 hover:text-white hover:bg-zinc-800 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 flex-1 overflow-y-auto space-y-5 text-xs font-mono">
+              {isAiSortingLoading ? (
+                <div className="py-16 text-center space-y-3">
+                  <RefreshCw className="w-6 h-6 text-emerald-400 animate-spin mx-auto" />
+                  <p className="text-sm text-white font-sans font-semibold">
+                    ChatGPT Brain is reviewing and ranking your leads...
+                  </p>
+                  <p className="text-xs text-zinc-500">
+                    Evaluating ICP fit, deal velocity, and decision maker certainty.
+                  </p>
+                </div>
+              ) : aiSortResult ? (
+                <>
+                  {/* Executive Summary */}
+                  <div className="p-4 rounded-xl bg-[#121215] border border-emerald-500/30 space-y-2">
+                    <div className="flex items-center gap-2 text-emerald-400 font-bold uppercase text-[10px] tracking-wider">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>AI Portfolio Executive Summary</span>
+                    </div>
+                    <p className="text-zinc-200 text-xs leading-relaxed font-sans">
+                      {aiSortResult.executiveSummary}
+                    </p>
+                    <div className="pt-2 border-t border-zinc-800 flex flex-wrap items-center gap-4 text-[11px] text-zinc-400">
+                      <span>Avg Score: <strong className="text-white">{aiSortResult.averageScore}/100</strong></span>
+                      <span>Tier A Targets: <strong className="text-emerald-400">{aiSortResult.tierACount}</strong></span>
+                      <span>Total Value: <strong className="text-emerald-400">{aiSortResult.totalDealValueEstimate}</strong></span>
+                    </div>
+                  </div>
+
+                  {/* Ranked Leads List */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] uppercase tracking-wider text-zinc-400 font-semibold">
+                        Ranked Pipeline Accounts ({aiSortResult.sortedLeads.length})
+                      </span>
+                      <button
+                        onClick={handleApplyAiSortToPipeline}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black font-semibold text-xs flex items-center gap-1.5 cursor-pointer font-sans"
+                      >
+                        <Check className="w-3.5 h-3.5 stroke-[3]" />
+                        <span>Apply AI Ranking to Pipeline</span>
+                      </button>
+                    </div>
+
+                    <div className="space-y-2.5">
+                      {aiSortResult.sortedLeads.map((item) => (
+                        <div
+                          key={item.leadId}
+                          className="p-3.5 rounded-xl bg-[#0d0d10] border border-[#27272a] hover:border-zinc-700 transition-colors space-y-2 font-sans"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2.5">
+                              <span className="w-6 h-6 rounded-md bg-[#181820] text-emerald-400 text-xs font-mono font-bold flex items-center justify-center border border-zinc-800">
+                                #{item.rank}
+                              </span>
+                              <span className="text-sm font-semibold text-white">
+                                {item.company}
+                              </span>
+                            </div>
+                            <span
+                              className={`px-2 py-0.5 rounded text-[11px] font-mono font-semibold ${
+                                item.tier.startsWith("Tier A")
+                                  ? "bg-emerald-950/70 text-emerald-400 border border-emerald-500/30"
+                                  : item.tier.startsWith("Tier B")
+                                  ? "bg-sky-950/70 text-sky-400 border border-sky-500/30"
+                                  : "bg-zinc-800 text-zinc-400 border border-zinc-700"
+                              }`}
+                            >
+                              {item.tier}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                            <div className="p-2.5 rounded-lg bg-black/50 border border-zinc-800 space-y-1">
+                              <span className="text-[10px] font-mono uppercase text-zinc-500">Primary Urgent Pain Point</span>
+                              <p className="text-zinc-300 text-[11px] leading-relaxed italic">
+                                "{item.primaryPainPoint}"
+                              </p>
+                            </div>
+                            <div className="p-2.5 rounded-lg bg-black/50 border border-zinc-800 space-y-1">
+                              <span className="text-[10px] font-mono uppercase text-zinc-500">Recommended Sales Action</span>
+                              <p className="text-emerald-300 text-[11px] leading-relaxed font-mono">
+                                {item.recommendedAction}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between pt-2 border-t border-zinc-800/80 text-[11px] font-mono text-zinc-400">
+                            <div>
+                              <span>Qualification: <strong className="text-white">{item.qualificationScore}/100</strong></span>
+                              <span className="ml-3">Deal Prob: <strong className="text-emerald-400">{Math.round(item.dealProbability * 100)}%</strong></span>
+                            </div>
+                            <button
+                              onClick={() => {
+                                const matched = getStoredLeads().find((l) => l.id === item.leadId) || { company: item.company, id: item.leadId };
+                                handleOpenAiEmail(matched);
+                              }}
+                              className="px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-white text-xs flex items-center gap-1 cursor-pointer font-sans"
+                            >
+                              <Send className="w-3 h-3 text-emerald-400" />
+                              <span>Draft Cold Email</span>
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CHATGPT COLD EMAIL COMPOSER MODAL */}
+      {isAiEmailOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="relative w-full max-w-2xl max-h-[90vh] bg-[#09090b] border border-[#27272a] rounded-2xl flex flex-col overflow-hidden shadow-2xl">
+            <div className="p-5 border-b border-[#27272a] flex items-center justify-between bg-[#0d0d10]">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center">
+                  <Send className="w-4 h-4 text-emerald-400" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">
+                    ChatGPT Cold Email Generator
+                  </h3>
+                  <p className="text-xs text-zinc-400 font-mono mt-0.5">
+                    Target: {emailTargetLead?.name || emailTargetLead?.company} • Verified Fact-Grounded Outreach
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsAiEmailOpen(false)}
+                className="p-1 rounded-lg text-zinc-500 hover:text-white hover:bg-zinc-800 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 flex-1 overflow-y-auto space-y-4 font-sans text-xs">
+              {/* Strategic Angle Selector */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-mono uppercase text-zinc-400 font-semibold">
+                  Outbound Copywriting Strategy
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { id: "value_led", label: "Value-Led Pitch" },
+                    { id: "pain_point", label: "Pain-Point Agitation" },
+                    { id: "quick_question", label: "Quick Soft Question" },
+                    { id: "peer_to_peer", label: "Executive Peer-to-Peer" },
+                  ].map((a) => (
+                    <button
+                      key={a.id}
+                      onClick={() => {
+                        setEmailAngle(a.id);
+                        if (emailTargetLead) handleOpenAiEmail(emailTargetLead);
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-mono font-medium transition-colors cursor-pointer ${
+                        emailAngle === a.id
+                          ? "bg-emerald-500 text-black font-semibold"
+                          : "bg-[#141418] text-zinc-400 hover:text-white border border-zinc-800"
+                      }`}
+                    >
+                      {a.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {isAiEmailLoading ? (
+                <div className="py-12 text-center space-y-2 font-mono">
+                  <RefreshCw className="w-5 h-5 text-emerald-400 animate-spin mx-auto" />
+                  <p className="text-white text-xs">Drafting personalized sequence with ChatGPT Brain...</p>
+                </div>
+              ) : composedEmail ? (
+                <>
+                  {/* Subject Line with swap options */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-mono uppercase text-zinc-400 font-semibold">
+                      Subject Line
+                    </label>
+                    <div className="p-3 bg-black border border-zinc-800 rounded-xl text-white font-medium text-xs">
+                      {composedEmail.subject}
+                    </div>
+                    {composedEmail.altSubjects && composedEmail.altSubjects.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pt-1 text-[11px] font-mono">
+                        <span className="text-zinc-500">A/B Alternatives:</span>
+                        {composedEmail.altSubjects.map((alt, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => setComposedEmail({ ...composedEmail, subject: alt })}
+                            className="px-2 py-0.5 rounded bg-zinc-900 text-zinc-300 hover:text-emerald-400 border border-zinc-800 cursor-pointer"
+                          >
+                            "{alt}"
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Body */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] font-mono uppercase text-zinc-400 font-semibold">
+                        Personalized Body
+                      </label>
+                      <span className="text-[10px] font-mono text-emerald-400">
+                        {composedEmail.estimatedReadTimeSec}s read • {Math.round(composedEmail.confidenceScore * 100)}% Match
+                      </span>
+                    </div>
+                    <textarea
+                      rows={8}
+                      value={composedEmail.body}
+                      onChange={(e) => setComposedEmail({ ...composedEmail, body: e.target.value })}
+                      className="w-full bg-black border border-zinc-800 rounded-xl p-3.5 text-xs text-zinc-200 focus:outline-none focus:border-emerald-500 font-sans leading-relaxed"
+                    />
+                  </div>
+
+                  {/* Follow-up Sequence */}
+                  {composedEmail.followUpBody && (
+                    <div className="space-y-1.5 p-3 rounded-xl bg-[#121215] border border-zinc-800/80">
+                      <div className="flex items-center justify-between font-mono text-[10px] text-zinc-400">
+                        <span>Sequence Step 2 (3 Days Later)</span>
+                        <span className="text-zinc-500">{composedEmail.followUpSubject}</span>
+                      </div>
+                      <p className="text-zinc-300 text-[11px] leading-relaxed whitespace-pre-line">
+                        {composedEmail.followUpBody}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Actions */}
+                  <div className="pt-2 flex items-center justify-between gap-2">
+                    <button
+                      onClick={() => {
+                        const full = `Subject: ${composedEmail.subject}\n\n${composedEmail.body}\n\n---\nFollow-Up (3 Days Later):\n${composedEmail.followUpBody}`;
+                        navigator.clipboard.writeText(full);
+                        setCopiedEmail(true);
+                        setTimeout(() => setCopiedEmail(false), 2000);
+                      }}
+                      className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-semibold text-xs flex items-center gap-1.5 cursor-pointer"
+                    >
+                      {copiedEmail ? <Check className="w-3.5 h-3.5 stroke-[3]" /> : <CheckCheck className="w-3.5 h-3.5" />}
+                      <span>{copiedEmail ? "Copied to Clipboard!" : "Copy Full Sequence"}</span>
+                    </button>
+                    <button
+                      onClick={() => setIsAiEmailOpen(false)}
+                      className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold cursor-pointer"
+                    >
+                      Done
+                    </button>
+                  </div>
+                </>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

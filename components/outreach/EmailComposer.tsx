@@ -292,7 +292,7 @@ Growth Lead | Iwaju Marketing`;
               ) : (
                 <>
                   <Bot className="w-3 h-3" />
-                  <span>AI Personalize Hook</span>
+                  <span>Compose with ChatGPT Brain</span>
                 </>
               )}
             </button>

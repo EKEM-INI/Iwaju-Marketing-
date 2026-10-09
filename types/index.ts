@@ -121,3 +121,38 @@ export interface AutonomousAccount {
   nextRecheck: string;
   recheckReason?: string;
 }
+
+export interface EvaluatedLead {
+  leadId: string;
+  company: string;
+  rank: number;
+  qualificationScore: number;
+  tier: "Tier A - High Priority" | "Tier B - Medium Priority" | "Tier C - Low / Nurture";
+  dealProbability: number;
+  primaryPainPoint: string;
+  strategicAngle: string;
+  recommendedAction: string;
+}
+
+export interface AISortResult {
+  provider: string;
+  isLiveChatGPT: boolean;
+  executiveSummary: string;
+  averageScore: number;
+  tierACount: number;
+  totalDealValueEstimate: string;
+  sortedLeads: EvaluatedLead[];
+}
+
+export interface AIComposedEmail {
+  provider: string;
+  isLiveChatGPT: boolean;
+  subject: string;
+  altSubjects: string[];
+  body: string;
+  followUpSubject: string;
+  followUpBody: string;
+  hookFactUsed: string;
+  estimatedReadTimeSec: number;
+  confidenceScore: number;
+}
