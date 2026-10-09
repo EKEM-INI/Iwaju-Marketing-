@@ -9,7 +9,7 @@ export async function GET() {
   return NextResponse.json({
     status: "ok",
     hasApiKey: Boolean(apiKey && apiKey.trim().length > 0),
-    model: "gemini-2.5-flash",
+    model: "gemini-3.8-flash",
   });
 }
 
@@ -33,32 +33,41 @@ export async function POST(req: Request) {
       process.env.GOOGLE_API_KEY ||
       process.env.NEXT_PUBLIC_GEMINI_API_KEY;
 
-    const systemPrompt = `You are "Iwaju AI", the executive outbound intelligence assistant embedded directly into Iwaju Marketing OS.
-You are helping marketing executives, SDRs, agency founders, and clients navigate, understand, and leverage the Iwaju Marketing platform.
+    if (!apiKey || apiKey.trim().length === 0) {
+      return NextResponse.json({
+        answer: "⚠️ **Gemini API Key Missing:** No `GEMINI_API_KEY` was detected in your Vercel Environment Variables. Please make sure you added `GEMINI_API_KEY` under your Vercel Project Settings → Environment Variables and redeployed your application.",
+        provider: "Configuration Error",
+        isLiveGemini: false,
+      });
+    }
 
-PLATFORM CAPABILITIES:
-1. Executive Command Center (Dashboard):
-   - Real-time pipeline velocity metrics: Active Leads count, Pipeline Value (in NGN/USD), Average Lead Quality Score (0-100), and Closed Won conversions.
-2. High-Speed Lead Prospecting (/prospecting):
-   - Multi-source scraper integrating Apollo.io Live Organizations Search API, Google Maps Places API, and DeepCrawler radar.
-   - Searches targeted B2B accounts by industry and location (e.g. Lagos, Abuja, Port Harcourt, Uyo).
-3. Pipeline CRM Kanban Board (/pipeline):
-   - Visual Kanban columns: "New Lead", "Contacted", "Discovery / Meeting", "Closed Won".
-4. Cold Outreach Copy Engine (/outreach):
-   - Proven B2B cold email templates (Executive Brief, Pain Point, Social Proof, Meeting Invite).
-5. Authentication:
-   - Mandatory Google Workspace / Gmail account authentication gate.
+    const systemPrompt = `You are "Iwaju AI Copilot", the intelligent outbound sales and platform copilot for Iwaju Marketing OS.
+You are directly connected to Google Gemini to provide authentic, highly contextual, intelligent responses.
 
-Respond clearly, concisely, and authoritatively. If asked for sales pitches or outreach copy, provide high-converting, professional emails.`;
+PLATFORM CONTEXT:
+1. Executive Command Center: Live KPI metrics for leads, deals in NGN (₦) and USD ($), funnel velocity, and lead scoring.
+2. Lead Prospecting (/prospecting): Advanced B2B prospecting across Nigerian commercial hubs (Ikoyi, Victoria Island Lagos, Abuja, Port Harcourt, Uyo) and global hubs using Apollo.io, Google Maps Places API, and DeepCrawler radar.
+3. Pipeline CRM (/pipeline): Kanban CRM with stages: New Lead, Contacted, Meeting Booked, Closed Won. Allows dragging leads and managing contract values.
+4. Cold Outreach Copy Engine (/outreach): Dynamic personalization tokens ({{firstName}}, {{company}}, {{niche}}, {{location}}).
+5. Authentication: Google Workspace SSO login.
 
-    if (apiKey) {
+INSTRUCTIONS:
+- Give genuine, in-depth, authentic answers.
+- When asked to explain features or navigation, give precise instructions.
+- When asked to draft sales pitches, cold emails, or value propositions, generate tailored, high-converting copy.
+- Never give generic stock answers. Reason through the client's specific question.`;
+
+    const modelsToTry = ["gemini-3.8-flash", "gemini-flash-latest"];
+    let lastError: any = null;
+
+    for (const modelName of modelsToTry) {
       try {
-        const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey.trim()}`;
+        const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey.trim()}`;
 
-        // Format conversation contents for Gemini
+        // Build request payload
         const contents: any[] = [];
 
-        // Grounding context
+        // Grounding instruction
         contents.push({
           role: "user",
           parts: [{ text: `${systemPrompt}\n\nClient Question: ${message}` }],
@@ -73,7 +82,7 @@ Respond clearly, concisely, and authoritatively. If asked for sales pitches or o
             contents,
             generationConfig: {
               temperature: 0.7,
-              maxOutputTokens: 1024,
+              maxOutputTokens: 2048,
             },
           }),
         });
@@ -87,51 +96,25 @@ Respond clearly, concisely, and authoritatively. If asked for sales pitches or o
           if (generatedText) {
             return NextResponse.json({
               answer: generatedText,
-              provider: "Google Gemini 2.5 Flash",
+              provider: `Google Gemini (${modelName})`,
               isLiveGemini: true,
+              model: modelName,
             });
           }
         } else {
-          const errorMsg = geminiData?.error?.message || "Gemini API rejected the request.";
-          console.error("Gemini API Error:", geminiData);
-          return NextResponse.json({
-            answer: `⚠️ **Gemini API Error:** ${errorMsg}\n\nPlease check your \`GEMINI_API_KEY\` in your Vercel project environment variables and ensure the key is active in Google AI Studio.`,
-            provider: "Gemini Error Handler",
-            isLiveGemini: false,
-            error: errorMsg,
-          });
+          lastError = geminiData?.error?.message || `Model ${modelName} returned status ${geminiRes.status}`;
+          console.warn(`Gemini call to ${modelName} failed:`, geminiData);
         }
-      } catch (geminiError: any) {
-        console.error("Gemini invocation error:", geminiError);
-        return NextResponse.json({
-          answer: `⚠️ **Network error reaching Gemini:** ${geminiError.message || "Failed to contact Google API"}`,
-          provider: "Gemini Network Error",
-          isLiveGemini: false,
-        });
+      } catch (err: any) {
+        lastError = err.message;
       }
     }
 
-    // Fallback if no key is supplied
-    const q = message.toLowerCase();
-    let localAnswer = "";
-
-    if (q.includes("prospect") || q.includes("scrape") || q.includes("find lead") || q.includes("radar")) {
-      localAnswer = `**How Lead Prospecting Works in Iwaju Marketing:**\n- Navigate to **Lead Prospecting** in the sidebar.\n- Enter your target **Industry / Niche** and **Target Geography** (e.g. Ikoyi Lagos, Abuja, Uyo).\n- Select your data source (Apollo.io or Google Maps Places API).\n- Click **Initiate Deep Scrape** to uncover verified accounts with decision-maker contacts.\n- Click **Push to Pipeline** on any discovered lead to immediately populate your CRM!`;
-    } else if (q.includes("pipeline") || q.includes("kanban") || q.includes("stage") || q.includes("crm")) {
-      localAnswer = `**Iwaju Pipeline CRM Overview:**\n- Open **Pipeline CRM** from the sidebar navigation.\n- Your leads are organized into standard outbound velocity stages: *New Lead*, *Contacted*, *Meeting Booked*, and *Closed Won*.\n- Click stage transition controls (\`‹\` and \`›\`) on any card to advance deals and update total revenue metrics.`;
-    } else if (q.includes("email") || q.includes("outreach") || q.includes("copy") || q.includes("template")) {
-      localAnswer = `**Cold Outreach Copy Engine:**\n- Go to **Outreach Engine** in the sidebar.\n- Choose from 4 proven executive templates: *Executive Value Brief*, *Pain-Point Agitator*, *Social Proof / Case Study*, and *Low-Friction Meeting Invite*.\n- Dynamic tokens like \`{{firstName}}\` and \`{{company}}\` automatically personalize the pitch for the currently selected lead.`;
-    } else if (q.includes("login") || q.includes("auth") || q.includes("google")) {
-      localAnswer = `**Google Authentication Security:**\n- All users are required to sign in with their Google account before accessing leads and pipeline metrics.\n- Your session is securely stored locally and can be signed out anytime via the user avatar in the top right header.`;
-    } else {
-      localAnswer = `**Iwaju AI Copilot Ready:**\nI can help you navigate Iwaju Marketing:\n- 🎯 **Lead Generation**: Explaining how Apollo & Google Maps prospecting works.\n- 💼 **Pipeline CRM**: Managing deal stages and revenue metrics.\n- ✉️ **Cold Outreach**: Generating custom sales copy and emails for decision makers.\n\n*Tip: Once you add \`GEMINI_API_KEY\` to your Vercel Environment Variables, redeploy to activate unrestricted live Gemini 2.5 generation for any question!*`;
-    }
-
     return NextResponse.json({
-      answer: localAnswer,
-      provider: "Iwaju Built-in Knowledge",
+      answer: `⚠️ **Gemini API Error:** ${lastError || "Failed to reach Google Gemini API"}.\n\nPlease ensure your \`GEMINI_API_KEY\` in Vercel is active and has access to Google Gemini in Google AI Studio.`,
+      provider: "Gemini Error",
       isLiveGemini: false,
-      notice: "GEMINI_API_KEY not detected yet in this deployment environment.",
+      error: lastError,
     });
   } catch (err: any) {
     return NextResponse.json(
