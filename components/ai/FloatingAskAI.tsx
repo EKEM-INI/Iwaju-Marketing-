@@ -167,11 +167,11 @@ export function FloatingAskAI() {
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          className="fixed bottom-6 right-6 z-40 flex items-center gap-2.5 px-4 py-3 rounded-full bg-white hover:bg-zinc-200 text-black font-bold text-sm shadow-xl  hover:scale-105 active:scale-95 transition-all duration-200 group border border-zinc-300"
+          className="fixed bottom-6 right-6 z-40 flex items-center gap-2.5 px-4 py-3 rounded-full bg-primary hover:bg-primary-hover text-primary-foreground font-medium text-sm shadow-xl  hover:scale-105 active:scale-95 transition-all duration-200 group border border-primary"
           aria-label="Open Iwaju AI Assistant"
         >
           <div className="relative">
-            <Sparkles className="w-5 h-5 text-black transition-transform" />
+            <Sparkles className="w-5 h-5 text-primary-foreground transition-transform" />
             <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-white animate-ping" />
           </div>
           <span className="tracking-wide">Ask AI</span>

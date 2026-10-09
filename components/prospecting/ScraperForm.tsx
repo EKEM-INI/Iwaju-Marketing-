@@ -206,7 +206,7 @@ export function ScraperForm({ onStartScrape, isLoading }: ScraperFormProps) {
         <button
           type="submit"
           disabled={isLoading}
-          className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-xl bg-white hover:bg-zinc-200 text-black font-bold text-sm tracking-wide shadow-glow hover:shadow-glow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-xl bg-primary hover:bg-primary-hover text-primary-foreground font-medium text-sm shadow-glow hover:shadow-glow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Zap className="w-4 h-4 fill-current stroke-[2.5]" />
           <span>{isLoading ? "Querying Discovery Engines..." : "Execute Lead Discovery Radar"}</span>

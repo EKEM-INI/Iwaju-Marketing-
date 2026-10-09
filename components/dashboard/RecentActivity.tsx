@@ -34,7 +34,7 @@ export function RecentActivity({ activities }: RecentActivityProps) {
 
   return (
     <div className="rounded-xl bg-zinc-950 border border-zinc-800 p-5 sm:p-6 flex flex-col h-full">
-      <div className="flex items-center justify-between pb-4 border-b border-zinc-900">
+      <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
         <div className="flex items-center gap-2">
           <Clock className="w-4 h-4 text-zinc-400" />
           <h3 className="font-semibold text-white text-sm">

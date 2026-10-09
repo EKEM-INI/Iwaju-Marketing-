@@ -418,7 +418,7 @@ Growth Lead | Iwaju Marketing`;
             <div className="flex items-center gap-2">
               <button
                 onClick={() => handleOpenEmailClient("gmail")}
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-zinc-200 text-black font-bold text-xs shadow-glow transition-all"
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-primary-foreground font-medium text-xs shadow-glow transition-all"
                 title="Open Gmail and mark as Contacted"
               >
                 <Send className="w-3.5 h-3.5 stroke-[2.5]" />

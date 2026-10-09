@@ -308,7 +308,7 @@ export default function AutonomousPage() {
             className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
               agentRunning
                 ? "bg-[#18181b] text-zinc-300 border border-[#27272a] hover:bg-[#27272a]"
-                : "bg-emerald-400 text-black hover:bg-emerald-300"
+                : "bg-primary text-primary-foreground hover:bg-primary-hover"
             }`}
           >
             {agentRunning ? (
@@ -342,7 +342,7 @@ export default function AutonomousPage() {
           <button
             type="submit"
             disabled={isDispatching || !composerPrompt.trim()}
-            className="absolute right-2 top-2 px-3 py-1.5 bg-emerald-400 hover:bg-emerald-300 disabled:opacity-40 text-black font-bold rounded-lg text-xs transition-colors cursor-pointer"
+            className="absolute right-2 top-2 px-3 py-1.5 bg-primary hover:bg-primary-hover disabled:opacity-40 text-primary-foreground font-medium rounded-lg text-xs transition-colors cursor-pointer"
           >
             {isDispatching ? "Compiling..." : "Dispatch"}
           </button>

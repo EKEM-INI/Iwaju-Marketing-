@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { GeistSans } from "geist/font/sans";
+import { GeistMono } from "geist/font/mono";
 import "./globals.css";
 import { AppShell } from "@/components/layout/AppShell";
-
-const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "Iwaju Marketing | B2B Lead Generation & Autonomous Agentic CRM",
@@ -25,8 +24,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
-      <body className={`${inter.className} bg-black text-zinc-100 min-h-screen antialiased selection:bg-zinc-800 selection:text-white`}>
+    <html
+      lang="en"
+      className={`dark ${GeistSans.variable} ${GeistMono.variable} h-full antialiased`}
+    >
+      <body className="font-sans bg-background text-foreground min-h-full">
         <AppShell>{children}</AppShell>
       </body>
     </html>

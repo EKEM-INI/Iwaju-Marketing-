@@ -79,7 +79,7 @@ export function MetricCards({ leads }: MetricCardsProps) {
               </div>
             </div>
 
-            <div className="mt-3 flex items-center gap-1.5 text-xs text-zinc-400 pt-3 border-t border-zinc-900">
+            <div className="mt-3 flex items-center gap-1.5 text-xs text-zinc-400 pt-3 border-t border-zinc-800">
               <TrendingUp className="w-3.5 h-3.5 text-zinc-300 shrink-0" />
               <span className="truncate">{m.change}</span>
             </div>

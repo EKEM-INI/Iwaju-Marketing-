@@ -24,7 +24,7 @@ export function QuickActionBanner() {
         <div className="flex flex-wrap sm:flex-nowrap items-center gap-3 shrink-0">
           <Link
             href="/autonomous"
-            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-5 py-3 rounded-lg bg-white hover:bg-zinc-200 text-black font-semibold text-sm transition-all duration-200 shadow-sm"
+            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-5 py-3 rounded-lg bg-primary hover:bg-primary-hover text-primary-foreground font-semibold text-sm transition-all duration-200 shadow-sm"
           >
             <Bot className="w-4 h-4 stroke-[2.5]" />
             <span>Switch to Autonomous AI</span>

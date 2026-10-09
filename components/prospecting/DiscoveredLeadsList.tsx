@@ -60,7 +60,7 @@ export function DiscoveredLeadsList({
           className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
             allSaved
               ? "bg-zinc-800 text-zinc-400 border border-zinc-700 cursor-default"
-              : "bg-emerald-500 hover:bg-emerald-400 text-zinc-950 shadow-glow"
+              : "bg-primary hover:bg-primary-hover text-primary-foreground shadow-glow"
           }`}
         >
           {allSaved ? (
@@ -164,7 +164,7 @@ export function DiscoveredLeadsList({
                   className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold transition-all ${
                     isSaved
                       ? "bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 cursor-default"
-                      : "bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold shadow-glow"
+                      : "bg-primary hover:bg-primary-hover text-primary-foreground font-medium shadow-glow"
                   }`}
                 >
                   {isSaved ? (

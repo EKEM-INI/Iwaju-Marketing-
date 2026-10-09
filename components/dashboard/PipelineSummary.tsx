@@ -56,7 +56,7 @@ export function PipelineSummary({ leads }: PipelineSummaryProps) {
 
   return (
     <div className="rounded-xl bg-zinc-950 border border-zinc-800 p-5 sm:p-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-zinc-900">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-zinc-800">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-lg bg-zinc-900 border border-zinc-800">
             <BarChart3 className="w-4 h-4 text-zinc-300" />

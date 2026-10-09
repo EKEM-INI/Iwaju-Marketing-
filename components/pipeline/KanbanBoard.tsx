@@ -178,7 +178,7 @@ export function KanbanBoard({
 
           <Link
             href="/prospecting"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white hover:bg-zinc-200 text-black font-bold text-xs shadow-glow transition-all"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary hover:bg-primary-hover text-primary-foreground font-medium text-xs shadow-glow transition-all"
           >
             <Plus className="w-4 h-4" />
             <span>Prospect Leads</span>

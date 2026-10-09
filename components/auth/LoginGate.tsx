@@ -143,7 +143,7 @@ export function LoginGate({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-black text-zinc-100 flex flex-col font-sans selection:bg-zinc-800 selection:text-white">
       {/* Top Bar */}
-      <header className="px-6 py-4 flex items-center justify-between border-b border-zinc-900 bg-black">
+      <header className="px-6 py-4 flex items-center justify-between border-b border-zinc-800 bg-black">
         <div className="flex items-center gap-3">
           <div className="w-7 h-7 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center">
             <Zap className="w-3.5 h-3.5 text-white fill-current" />
@@ -211,7 +211,7 @@ export function LoginGate({ children }: { children: React.ReactNode }) {
                 type="button"
                 onClick={handleGoogleLogin}
                 disabled={submitting}
-                className="w-full py-2.5 px-4 rounded-lg bg-white hover:bg-zinc-200 text-black font-semibold text-xs flex items-center justify-center gap-2.5 transition-all active:scale-98 cursor-pointer disabled:opacity-50"
+                className="w-full py-2.5 px-4 rounded-lg bg-primary hover:bg-primary-hover text-primary-foreground font-semibold text-xs flex items-center justify-center gap-2.5 transition-all active:scale-98 cursor-pointer disabled:opacity-50"
               >
                 <svg className="w-3.5 h-3.5" viewBox="0 0 24 24">
                   <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -298,7 +298,7 @@ export function LoginGate({ children }: { children: React.ReactNode }) {
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full py-2.5 bg-white text-black font-semibold rounded-lg hover:bg-zinc-200 transition-all text-xs cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                className="w-full py-2.5 bg-primary text-primary-foreground font-semibold rounded-lg hover:bg-primary-hover transition-all text-xs cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 <span>{submitting ? "Sending verification..." : "Create Account & Send Code"}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
@@ -358,7 +358,7 @@ export function LoginGate({ children }: { children: React.ReactNode }) {
               <button
                 type="submit"
                 disabled={submitting || verificationCode.length < 6}
-                className="w-full py-2.5 bg-white text-black font-semibold rounded-lg hover:bg-zinc-200 transition-all text-xs cursor-pointer disabled:opacity-50"
+                className="w-full py-2.5 bg-primary text-primary-foreground font-semibold rounded-lg hover:bg-primary-hover transition-all text-xs cursor-pointer disabled:opacity-50"
               >
                 {submitting ? "Verifying..." : "Verify Code & Enter"}
               </button>
@@ -383,7 +383,7 @@ export function LoginGate({ children }: { children: React.ReactNode }) {
           )}
 
           {/* Security Features */}
-          <div className="pt-3 border-t border-zinc-900 space-y-1.5 text-[11px] text-zinc-500">
+          <div className="pt-3 border-t border-zinc-800 space-y-1.5 text-[11px] text-zinc-500">
             <div className="flex items-center gap-2">
               <CheckCircle2 className="w-3 h-3 text-zinc-400 shrink-0" />
               <span>Full dark mode CRM workspace</span>
@@ -397,7 +397,7 @@ export function LoginGate({ children }: { children: React.ReactNode }) {
       </main>
 
       {/* Minimal Dark Footer */}
-      <footer className="px-6 py-4 text-center text-[11px] font-mono text-zinc-600 border-t border-zinc-900">
+      <footer className="px-6 py-4 text-center text-[11px] font-mono text-zinc-600 border-t border-zinc-800">
         Iwaju Marketing OS © {new Date().getFullYear()} • Agentic Sales CRM
       </footer>
     </div>

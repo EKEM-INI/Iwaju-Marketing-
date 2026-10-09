@@ -16,34 +16,40 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <AuthProvider>
       <LoginGate>
         <ToastProvider>
-          <div className="flex h-screen bg-black text-zinc-100 overflow-hidden font-sans antialiased selection:bg-zinc-800 selection:text-white relative">
-            <Sidebar className="hidden lg:flex" />
+          <div className="relative isolate flex h-screen flex-col overflow-hidden bg-background font-sans text-foreground antialiased">
+            {/* Slim top header */}
+            <Header onMobileMenuToggle={() => setMobileMenuOpen(!mobileMenuOpen)} />
 
-            {/* Mobile Sidebar Overlay */}
-            {mobileMenuOpen && (
-              <div className="fixed inset-0 z-50 lg:hidden flex">
-                <div
-                  className="fixed inset-0 bg-black/80 backdrop-blur-sm transition-opacity"
-                  onClick={() => setMobileMenuOpen(false)}
-                />
-                <div className="relative flex flex-col w-72 max-w-[85vw] bg-black border-r border-zinc-800 z-10 shadow-2xl">
-                  <button
+            <div className="flex min-h-0 flex-1">
+              {/* Desktop icon rail */}
+              <Sidebar variant="rail" className="hidden md:flex" />
+
+              {/* Mobile navigation drawer */}
+              {mobileMenuOpen && (
+                <div className="fixed inset-0 z-50 flex md:hidden">
+                  <div
+                    className="fixed inset-0 bg-black/60 transition-opacity"
                     onClick={() => setMobileMenuOpen(false)}
-                    className="absolute top-4 right-4 p-2 rounded-lg text-zinc-400 hover:text-white bg-zinc-900 border border-zinc-800"
-                    aria-label="Close menu"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                  <Sidebar onNavigate={() => setMobileMenuOpen(false)} />
+                  />
+                  <div className="relative z-10 flex w-64 max-w-[85vw] flex-col border-r border-border bg-background shadow-lg">
+                    <div className="flex h-12 items-center justify-between border-b border-border px-4">
+                      <span className="text-sm font-medium">Navigation</span>
+                      <button
+                        onClick={() => setMobileMenuOpen(false)}
+                        className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        aria-label="Close menu"
+                      >
+                        <X className="size-4" />
+                      </button>
+                    </div>
+                    <Sidebar variant="full" onNavigate={() => setMobileMenuOpen(false)} />
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* Main Stage Content */}
-            <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-black">
-              <Header onMobileMenuToggle={() => setMobileMenuOpen(!mobileMenuOpen)} />
-              <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8 bg-black">
-                <div className="max-w-7xl mx-auto space-y-6">
+              {/* Main content */}
+              <main className="flex min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden px-4 pb-4 pt-4 md:px-6 md:pb-6 md:pt-6">
+                <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6">
                   {children}
                 </div>
               </main>
