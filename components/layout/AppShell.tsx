@@ -16,7 +16,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <AuthProvider>
       <LoginGate>
         <ToastProvider>
-          <div className="flex h-screen bg-[#080c14] text-slate-100 overflow-hidden font-sans antialiased selection:bg-emerald-500/30 selection:text-emerald-200 relative">
+          <div className="flex h-screen bg-black text-slate-100 overflow-hidden font-sans antialiased selection:bg-emerald-500/30 selection:text-emerald-200 relative">
             <Sidebar className="hidden lg:flex" />
 
             {mobileMenuOpen && (
