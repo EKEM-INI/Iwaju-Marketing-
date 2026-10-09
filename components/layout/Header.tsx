@@ -11,6 +11,7 @@ import {
   LogOut,
   ShieldCheck,
   ChevronDown,
+  Mail,
 } from "lucide-react";
 import { getStoredLeads } from "@/lib/storage";
 import { formatCurrency } from "@/lib/utils";
@@ -114,11 +115,17 @@ export function Header({ onMobileMenuToggle }: HeaderProps) {
               className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-slate-900 border border-transparent hover:border-slate-800 transition-colors focus:outline-none"
               aria-label="User profile options"
             >
-              <img
-                src={user.avatar}
-                alt={user.name}
-                className="w-7 h-7 rounded-lg ring-1 ring-emerald-500/40 object-cover"
-              />
+              {user.avatar ? (
+                <img
+                  src={user.avatar}
+                  alt={user.name}
+                  className="w-7 h-7 rounded-lg ring-1 ring-emerald-500/40 object-cover"
+                />
+              ) : (
+                <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center font-bold text-xs">
+                  {user.name.charAt(0)}
+                </div>
+              )}
               <span className="hidden md:inline-block text-xs font-medium text-slate-200 max-w-[100px] truncate">
                 {user.name.split(" ")[0]}
               </span>
@@ -135,7 +142,7 @@ export function Header({ onMobileMenuToggle }: HeaderProps) {
                   <p className="text-[11px] text-slate-400 truncate mt-0.5">{user.email}</p>
                   <div className="mt-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-medium">
                     <ShieldCheck className="w-3 h-3" />
-                    Google Account Verified
+                    {user.provider === "google" ? "Google Account Verified" : "Verified Email Account"}
                   </div>
                 </div>
 
@@ -148,7 +155,7 @@ export function Header({ onMobileMenuToggle }: HeaderProps) {
                     className="w-full flex items-center gap-2.5 px-3 py-2 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-xl transition-colors font-medium"
                   >
                     <LogOut className="w-4 h-4" />
-                    <span>Sign Out of Google</span>
+                    <span>Sign Out</span>
                   </button>
                 </div>
               </div>
