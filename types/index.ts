@@ -54,3 +54,70 @@ export interface PipelineColumnDef {
   badgeBg: string;
   borderCol: string;
 }
+
+export type EvidenceKind =
+  | "dns.mx-record"
+  | "linkedin.employer-and-name"
+  | "crm.signature-block"
+  | "corporate.registry"
+  | "github.account-identity"
+  | "web.cited-claim"
+  | "search.cites-profile"
+  | "handle.name-form"
+  | "employer-only";
+
+export type FactBand = "strong" | "weak";
+export type FactStatus = "auto_applied" | "pending_approval" | "approved" | "rejected";
+
+export interface FactItem {
+  id: string;
+  accountId: string;
+  companyName: string;
+  field: "email" | "decisionMaker" | "phone" | "techStack" | "dealValue" | "directMobile" | "employees" | "summary" | "website";
+  fieldLabel: string;
+  value: string;
+  source: string;
+  method: string;
+  kind: "primary" | "supporting" | "weak";
+  confidence: number;
+  scoreBand: FactBand;
+  status: FactStatus;
+  rationale: string;
+  timestamp: string;
+}
+
+export interface AutonomousAccount {
+  id: string;
+  name: string;
+  domain: string;
+  niche: string;
+  location: string;
+  dealValue: string;
+  rawDealValue: number;
+  stage: "new" | "discovery" | "demo" | "proposal" | "won";
+  agentStatus: "active" | "enriched" | "recheck-scheduled" | "needs-review";
+  lastAction: string;
+  owner: string;
+  facts: {
+    decisionMaker: string;
+    title: string;
+    email: string;
+    phone: string;
+    employees: string;
+    techStack: string[];
+    summary: string;
+    funding?: string;
+  };
+  evidenceLedger: {
+    id: string;
+    source: string;
+    fact: string;
+    confidence: "verified" | "observed" | "weak";
+    confidenceScore?: number;
+    status?: FactStatus;
+    timestamp: string;
+  }[];
+  agentNotes: string[];
+  nextRecheck: string;
+  recheckReason?: string;
+}
