@@ -10,6 +10,9 @@ import {
   Minimize2,
   Maximize2,
   Trash2,
+  Key,
+  CheckCircle2,
+  Settings,
 } from "lucide-react";
 
 interface Message {
@@ -23,20 +26,44 @@ interface Message {
 export function FloatingAskAI() {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [customKey, setCustomKey] = useState("");
+  const [hasServerKey, setHasServerKey] = useState<boolean | null>(null);
+
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "welcome-msg",
       sender: "ai",
-      text: "👋 Hello! I am **Iwaju AI Copilot** powered by Google Gemini. Ask me anything about using this platform, lead prospecting, pipeline CRM, or generating cold outreach copy!",
+      text: "👋 Hello! I am **Iwaju AI Copilot** connected to **Google Gemini**. Ask me anything about using this platform, lead prospecting, pipeline CRM, or generating cold sales copy!",
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      provider: "Iwaju Intelligence",
+      provider: "Gemini 2.5 Flash",
     },
   ]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Restore client custom key and check server status
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("iwaju_gemini_api_key");
+      if (stored) setCustomKey(stored);
+    } catch (e) {
+      // ignore
+    }
+
+    // Ping /api/ai/ask to verify environment API key
+    fetch("/api/ai/ask")
+      .then((res) => res.json())
+      .then((data) => {
+        setHasServerKey(Boolean(data.hasApiKey));
+      })
+      .catch(() => {
+        setHasServerKey(false);
+      });
+  }, []);
 
   useEffect(() => {
     if (isOpen && !isMinimized) {
@@ -49,6 +76,15 @@ export function FloatingAskAI() {
       setTimeout(() => inputRef.current?.focus(), 150);
     }
   }, [isOpen, isMinimized]);
+
+  const handleSaveCustomKey = () => {
+    if (customKey.trim()) {
+      localStorage.setItem("iwaju_gemini_api_key", customKey.trim());
+    } else {
+      localStorage.removeItem("iwaju_gemini_api_key");
+    }
+    setShowSettings(false);
+  };
 
   const handleSendMessage = async (customText?: string) => {
     const textToSend = customText || input;
@@ -66,10 +102,18 @@ export function FloatingAskAI() {
     setLoading(true);
 
     try {
+      const payload: any = { message: textToSend.trim() };
+      if (customKey.trim()) {
+        payload.apiKey = customKey.trim();
+      }
+
       const res = await fetch("/api/ai/ask", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: textToSend.trim() }),
+        headers: {
+          "Content-Type": "application/json",
+          ...(customKey.trim() ? { "x-gemini-api-key": customKey.trim() } : {}),
+        },
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
@@ -80,7 +124,7 @@ export function FloatingAskAI() {
           sender: "ai",
           text: data.answer,
           timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-          provider: data.provider || "Gemini 2.5 Flash",
+          provider: data.provider || "Google Gemini 2.5 Flash",
         };
         setMessages((prev) => [...prev, aiReply]);
       } else {
@@ -90,7 +134,7 @@ export function FloatingAskAI() {
       const errorMsg: Message = {
         id: `err-${Date.now()}`,
         sender: "ai",
-        text: `⚠️ **Notice:** ${err.message || "Failed to reach AI endpoint"}. Configure \`GEMINI_API_KEY\` in your \`.env.local\` to enable live generation.`,
+        text: `⚠️ **Notice:** ${err.message || "Failed to reach AI endpoint"}. Verify that your \`GEMINI_API_KEY\` is added in Vercel environment variables or enter it in settings.`,
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       };
       setMessages((prev) => [...prev, errorMsg]);
@@ -106,6 +150,7 @@ export function FloatingAskAI() {
         sender: "ai",
         text: "Conversation cleared. How can I assist you with Iwaju Marketing today?",
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        provider: "Gemini 2.5 Flash",
       },
     ]);
   };
@@ -114,7 +159,7 @@ export function FloatingAskAI() {
     "Explain how the lead scraper works",
     "How do I use the Pipeline Kanban?",
     "Write a cold email for a real estate MD",
-    "How do I add my Gemini API key?",
+    "Explain my pipeline deal value",
   ];
 
   return (
@@ -142,6 +187,7 @@ export function FloatingAskAI() {
             isMinimized ? "h-14" : "h-[540px] max-h-[82vh]"
           }`}
         >
+          {/* Header */}
           <div className="px-4 py-3 border-b border-slate-800/80 bg-slate-900/80 flex items-center justify-between select-none">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-emerald-400 to-indigo-500 flex items-center justify-center shadow-sm">
@@ -150,13 +196,32 @@ export function FloatingAskAI() {
               <div>
                 <div className="flex items-center gap-1.5">
                   <h3 className="text-xs font-bold text-white tracking-tight">Iwaju AI Copilot</h3>
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      hasServerKey || customKey ? "bg-emerald-400 animate-pulse" : "bg-amber-400"
+                    }`}
+                    title={hasServerKey ? "Gemini API Connected" : "Local mode"}
+                  />
                 </div>
-                <p className="text-[10px] text-slate-400">Powered by Gemini 2.5</p>
+                <p className="text-[10px] text-slate-400 flex items-center gap-1">
+                  <span>Powered by Gemini 2.5</span>
+                  {hasServerKey && (
+                    <span className="text-emerald-400 font-medium">• Live API Active</span>
+                  )}
+                </p>
               </div>
             </div>
 
             <div className="flex items-center gap-1">
+              <button
+                onClick={() => setShowSettings(!showSettings)}
+                title="API Key Settings"
+                className={`p-1.5 rounded-lg transition-colors ${
+                  showSettings ? "bg-emerald-500/20 text-emerald-400" : "text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+                }`}
+              >
+                <Settings className="w-3.5 h-3.5" />
+              </button>
               {!isMinimized && (
                 <button
                   onClick={clearChat}
@@ -183,6 +248,44 @@ export function FloatingAskAI() {
             </div>
           </div>
 
+          {/* Settings Overlay */}
+          {showSettings && (
+            <div className="p-3.5 bg-slate-900 border-b border-slate-800 text-xs space-y-2.5 animate-in fade-in">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-slate-200 flex items-center gap-1.5 text-[11px]">
+                  <Key className="w-3 h-3 text-emerald-400" />
+                  Gemini API Connection
+                </span>
+                <span
+                  className={`text-[10px] px-2 py-0.5 rounded-full font-mono ${
+                    hasServerKey ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-slate-800 text-slate-400"
+                  }`}
+                >
+                  {hasServerKey ? "Vercel Env Key Detected" : "Vercel Key Checking"}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 leading-snug">
+                Your Vercel environment automatically supplies <code className="text-emerald-300">GEMINI_API_KEY</code>. You can also override or test with a direct key below:
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  value={customKey}
+                  onChange={(e) => setCustomKey(e.target.value)}
+                  placeholder="Optional override: AIzaSy..."
+                  className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                />
+                <button
+                  onClick={handleSaveCustomKey}
+                  className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-lg transition-colors"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Body */}
           {!isMinimized && (
             <>
               <div className="flex-1 overflow-y-auto p-4 space-y-3.5 text-xs">
@@ -232,7 +335,7 @@ export function FloatingAskAI() {
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-bounce" />
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-bounce [animation-delay:0.2s]" />
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-bounce [animation-delay:0.4s]" />
-                      <span className="ml-1 text-[11px]">Thinking with Gemini...</span>
+                      <span className="ml-1 text-[11px]">Querying Google Gemini...</span>
                     </div>
                   </div>
                 )}
@@ -281,7 +384,7 @@ export function FloatingAskAI() {
                 </div>
                 <div className="mt-1.5 flex items-center justify-between text-[10px] text-slate-400 px-1">
                   <span>Press Enter to send</span>
-                  <span>Direct Gemini API hook</span>
+                  <span>Direct Gemini 2.5 API hook</span>
                 </div>
               </div>
             </>

@@ -1,8 +1,22 @@
 import { NextResponse } from "next/server";
 
+export async function GET() {
+  const apiKey =
+    process.env.GEMINI_API_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+
+  return NextResponse.json({
+    status: "ok",
+    hasApiKey: Boolean(apiKey && apiKey.trim().length > 0),
+    model: "gemini-2.5-flash",
+  });
+}
+
 export async function POST(req: Request) {
   try {
-    const { message } = await req.json();
+    const body = await req.json();
+    const { message, history, apiKey: clientApiKey } = body;
 
     if (!message || typeof message !== "string") {
       return NextResponse.json(
@@ -11,8 +25,12 @@ export async function POST(req: Request) {
       );
     }
 
+    const headerApiKey = req.headers.get("x-gemini-api-key");
     const apiKey =
+      (clientApiKey && clientApiKey.trim()) ||
+      (headerApiKey && headerApiKey.trim()) ||
       process.env.GEMINI_API_KEY ||
+      process.env.GOOGLE_API_KEY ||
       process.env.NEXT_PUBLIC_GEMINI_API_KEY;
 
     const systemPrompt = `You are "Iwaju AI", the executive outbound intelligence assistant embedded directly into Iwaju Marketing OS.
@@ -35,7 +53,16 @@ Respond clearly, concisely, and authoritatively. If asked for sales pitches or o
 
     if (apiKey) {
       try {
-        const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+        const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey.trim()}`;
+
+        // Format conversation contents for Gemini
+        const contents: any[] = [];
+
+        // Grounding context
+        contents.push({
+          role: "user",
+          parts: [{ text: `${systemPrompt}\n\nClient Question: ${message}` }],
+        });
 
         const geminiRes = await fetch(geminiEndpoint, {
           method: "POST",
@@ -43,12 +70,7 @@ Respond clearly, concisely, and authoritatively. If asked for sales pitches or o
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            contents: [
-              {
-                role: "user",
-                parts: [{ text: `${systemPrompt}\n\nClient Question: ${message}` }],
-              },
-            ],
+            contents,
             generationConfig: {
               temperature: 0.7,
               maxOutputTokens: 1024,
@@ -56,24 +78,40 @@ Respond clearly, concisely, and authoritatively. If asked for sales pitches or o
           }),
         });
 
+        const geminiData = await geminiRes.json();
+
         if (geminiRes.ok) {
-          const geminiData = await geminiRes.json();
           const generatedText =
             geminiData?.candidates?.[0]?.content?.parts?.[0]?.text;
 
           if (generatedText) {
             return NextResponse.json({
               answer: generatedText,
-              provider: "Google Gemini 2.5 Flash (Live API)",
+              provider: "Google Gemini 2.5 Flash",
               isLiveGemini: true,
             });
           }
+        } else {
+          const errorMsg = geminiData?.error?.message || "Gemini API rejected the request.";
+          console.error("Gemini API Error:", geminiData);
+          return NextResponse.json({
+            answer: `⚠️ **Gemini API Error:** ${errorMsg}\n\nPlease check your \`GEMINI_API_KEY\` in your Vercel project environment variables and ensure the key is active in Google AI Studio.`,
+            provider: "Gemini Error Handler",
+            isLiveGemini: false,
+            error: errorMsg,
+          });
         }
-      } catch (geminiError) {
+      } catch (geminiError: any) {
         console.error("Gemini invocation error:", geminiError);
+        return NextResponse.json({
+          answer: `⚠️ **Network error reaching Gemini:** ${geminiError.message || "Failed to contact Google API"}`,
+          provider: "Gemini Network Error",
+          isLiveGemini: false,
+        });
       }
     }
 
+    // Fallback if no key is supplied
     const q = message.toLowerCase();
     let localAnswer = "";
 
@@ -86,13 +124,14 @@ Respond clearly, concisely, and authoritatively. If asked for sales pitches or o
     } else if (q.includes("login") || q.includes("auth") || q.includes("google")) {
       localAnswer = `**Google Authentication Security:**\n- All users are required to sign in with their Google account before accessing leads and pipeline metrics.\n- Your session is securely stored locally and can be signed out anytime via the user avatar in the top right header.`;
     } else {
-      localAnswer = `**Iwaju AI Copilot Ready:**\nI can help you navigate Iwaju Marketing:\n- 🎯 **Lead Generation**: Explaining how Apollo & Google Maps prospecting works.\n- 💼 **Pipeline CRM**: Managing deal stages and revenue metrics.\n- ✉️ **Cold Outreach**: Generating custom sales copy and emails for decision makers.\n\n*Tip: Add \`GEMINI_API_KEY="your_key"\` to your \`.env.local\` file to enable unrestricted live Gemini generative responses for any client query.*`;
+      localAnswer = `**Iwaju AI Copilot Ready:**\nI can help you navigate Iwaju Marketing:\n- 🎯 **Lead Generation**: Explaining how Apollo & Google Maps prospecting works.\n- 💼 **Pipeline CRM**: Managing deal stages and revenue metrics.\n- ✉️ **Cold Outreach**: Generating custom sales copy and emails for decision makers.\n\n*Tip: Once you add \`GEMINI_API_KEY\` to your Vercel Environment Variables, redeploy to activate unrestricted live Gemini 2.5 generation for any question!*`;
     }
 
     return NextResponse.json({
       answer: localAnswer,
-      provider: "Iwaju Outbound Intelligence",
+      provider: "Iwaju Built-in Knowledge",
       isLiveGemini: false,
+      notice: "GEMINI_API_KEY not detected yet in this deployment environment.",
     });
   } catch (err: any) {
     return NextResponse.json(
