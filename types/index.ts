@@ -64,7 +64,8 @@ export type EvidenceKind =
   | "web.cited-claim"
   | "search.cites-profile"
   | "handle.name-form"
-  | "employer-only";
+  | "employer-only"
+  | "chatgpt.assessment";
 
 export type FactBand = "strong" | "weak";
 export type FactStatus = "auto_applied" | "pending_approval" | "approved" | "rejected";
@@ -144,15 +145,265 @@ export interface AISortResult {
   sortedLeads: EvaluatedLead[];
 }
 
+export interface GroundedFact {
+  id: string;
+  field: string;
+  value: string;
+  source: string;
+}
+
+export interface RefusedFact {
+  id: string;
+  field: string;
+  reason: string;
+}
+
+export type ComposeStatus =
+  | "live"
+  | "no_key"
+  | "provider_error"
+  | "parse_error"
+  | "no_approved_facts"
+  | "bad_request";
+
+export interface EmailCompliance {
+  senderIdentified: boolean;
+  optOutPresent: boolean;
+  onlyApprovedFactsCited: boolean;
+  noBracketedClaimsMissing: boolean;
+  inventedNumbersDetected: boolean;
+}
+
 export interface AIComposedEmail {
-  provider: string;
+  success: boolean;
+  status: ComposeStatus;
+  provider?: string;
   isLiveChatGPT: boolean;
+  error?: string;
+  tone: string;
+  senderName?: string;
+  senderCompany?: string;
   subject: string;
   altSubjects: string[];
   body: string;
   followUpSubject: string;
   followUpBody: string;
-  hookFactUsed: string;
+  approvedFacts: GroundedFact[];
+  refusedFacts: RefusedFact[];
+  citedFacts?: GroundedFact[];
+  inventedCitations?: string[];
   estimatedReadTimeSec: number;
-  confidenceScore: number;
+  compliance?: EmailCompliance;
+  compliancePassed?: boolean;
+}
+
+export type LeadVerdictStatus = "qualified" | "needs_review" | "disqualified";
+
+export interface LeadVerdict {
+  leadId: string;
+  company: string;
+  status: LeadVerdictStatus;
+  qualificationScore: number;
+  confidence: number;
+  reliableFields: string[];
+  issues: string[];
+  recommendedAction: string;
+  rationale: string;
+}
+
+export interface AgentReport {
+  headline: string;
+  executiveSummary: string;
+  reviewedCount: number;
+  qualifiedCount: number;
+  needsReviewCount: number;
+  disqualifiedCount: number;
+  averageScore: number;
+  dataQualityFindings: string[];
+  topTargets: { leadId: string; company: string; why: string }[];
+  nextActions: string[];
+}
+
+/* ------------------------------------------------------------------ *
+ * Trust-layer agents. Every agent answers through the same envelope so
+ * the UI can show "no key" / "provider error" instead of fake results.
+ * ------------------------------------------------------------------ */
+
+export type AgentStatus =
+  | "live"
+  | "no_key"
+  | "provider_error"
+  | "parse_error"
+  | "bad_request"
+  | "empty_input";
+
+export interface AgentEnvelope<T> {
+  success: boolean;
+  agent: string;
+  status: AgentStatus;
+  /** "google-gemini" when a model answered, "deterministic" when pure rules ran. */
+  provider: string;
+  live: boolean;
+  ranAt: string;
+  note?: string;
+  error?: string;
+  data?: T;
+}
+
+export type PrivacyClass = "business-contact" | "personal-contact" | "company-fact" | "unknown";
+
+export interface ClaimSource {
+  uri: string;
+  title?: string;
+  publishedAt?: string;
+}
+
+export interface ResolvedClaim {
+  field: string;
+  value: string;
+  claim: string;
+  state: "supported" | "contradicted" | "not_found";
+  confidence: number;
+  sources: ClaimSource[];
+  /** Days between the newest cited source and now; null when nothing was cited. */
+  freshnessDays: number | null;
+  privacy: PrivacyClass;
+  /** Computed by the server from real checks. A model cannot grant itself write access. */
+  autoApplyAllowed: boolean;
+  disposition: "write" | "stage_for_review" | "reject";
+  rationale: string;
+}
+
+export interface EvidenceResearchResult {
+  account: string;
+  domain: string | null;
+  searchQueriesRun: string[];
+  claims: ResolvedClaim[];
+  questionsWorthAsking: string[];
+  coverage: { checked: number; supported: number; contradicted: number; notFound: number };
+}
+
+export type SignalKind =
+  | "hiring"
+  | "funding"
+  | "expansion"
+  | "technology"
+  | "leadership"
+  | "contract"
+  | "content";
+
+export interface BuyingSignal {
+  id: string;
+  kind: SignalKind;
+  summary: string;
+  strength: number;
+  /** "cited" = a live search result backs it. "uncited" = model claim, shown but not trusted. */
+  status: "cited" | "uncited";
+  sourceUri: string | null;
+  sourceDomain: string | null;
+  observedAsOf: string | null;
+  withinDays: number | null;
+}
+
+export interface SignalScanResult {
+  account: string;
+  domain: string | null;
+  signals: BuyingSignal[];
+  hiringPosts: number;
+  fundingEvents: number;
+  techStack: string[];
+  momentumScore: number;
+  citedCount: number;
+  uncitedCount: number;
+}
+
+export interface AccountBrief {
+  account: string;
+  snapshot: string[];
+  whatWeKnow: string[];
+  whatIsUnproven: string[];
+  whyNow: string;
+  risks: string[];
+  openQuestions: string[];
+  callPlan: string[];
+  suggestedNextStep: string;
+}
+
+export interface NextBestAction {
+  leadId: string;
+  company: string;
+  action: string;
+  why: string;
+  /** What changes on the record if the rep does it — and how to undo it. */
+  effect: string;
+  reversible: boolean;
+  effortMinutes: number;
+  blockedBy: string | null;
+}
+
+export interface ReplyIntelligence {
+  replyExcerpt: string;
+  classification:
+    | "interested"
+    | "objection"
+    | "question"
+    | "referral"
+    | "not_now"
+    | "rejection"
+    | "out_of_office"
+    | "auto_reply"
+    | "unclear";
+  sentiment: "positive" | "neutral" | "negative";
+  confidence: number;
+  /** Short spans quoted straight out of the reply so the rep can check the reading. */
+  evidenceQuotes: string[];
+  objections: string[];
+  commitments: string[];
+  whatTheyAskedFor: string[];
+  readingBetweenTheLines: string;
+  suggestedReply: string | null;
+  suggestedReplyFactsUsed: string[];
+  followUpAdvice: string;
+  suggestedStage: PipelineStage | null;
+}
+
+export interface ForecastLine {
+  leadId: string;
+  company: string;
+  stage: PipelineStage;
+  amount: number;
+  currency: string;
+  stageWeight: number;
+  weightedAmount: number;
+  riskFlags: string[];
+  riskScore: number;
+  nextAction: string;
+}
+
+export interface PipelineForecast {
+  currency: string;
+  openCount: number;
+  grossPipeline: number;
+  weightedForecast: number;
+  coverageRatio: number | null;
+  committed: number;
+  bestCase: number;
+  winRateAssumption: string;
+  byStage: { stage: PipelineStage; label: string; count: number; gross: number; weight: number; weighted: number }[];
+  byCurrency: { currency: string; count: number; gross: number; weighted: number }[];
+  riskiest: ForecastLine[];
+  stalled: ForecastLine[];
+  assumptions: string[];
+  lines: ForecastLine[];
+}
+
+/** Phone / WhatsApp / voice may only be proposed once consent is recorded. */
+export interface ConsentRecord {
+  leadId: string;
+  channel: "phone" | "whatsapp" | "voice";
+  granted: boolean;
+  grantedAt: string | null;
+  source: string;
+  /** Personal data is not kept indefinitely; this is the review date, not a silent delete. */
+  retainUntil: string | null;
 }

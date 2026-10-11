@@ -1,7 +1,11 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useState, useEffect } from "react";
 import { KanbanBoard } from "@/components/pipeline/KanbanBoard";
+import { AccountFitPanel } from "@/components/pipeline/AccountFitPanel";
+import { TrustPanel } from "@/components/pipeline/TrustPanel";
+import { AgentWorkbench } from "@/components/pipeline/AgentWorkbench";
+import { EvidenceCounts, FitSignals } from "@/lib/icp";
 import {
   getStoredLeads,
   updateLeadStage,
@@ -56,6 +60,10 @@ export default function PipelinePage() {
   };
   const { showToast } = useToast();
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [evidenceByLead, setEvidenceByLead] = useState<Map<string, EvidenceCounts>>(new Map());
+  const [signalsByLead, setSignalsByLead] = useState<Map<string, FitSignals>>(new Map());
+  const handleEvidence = useCallback((counts: Map<string, EvidenceCounts>) => setEvidenceByLead(counts), []);
+  const handleSignals = useCallback((counts: Map<string, FitSignals>) => setSignalsByLead(counts), []);
 
   useEffect(() => {
     setLeads(getStoredLeads());
@@ -154,7 +162,33 @@ export default function PipelinePage() {
         </div>
       </div>
 
+      {/* Record trust: live verification evidence and reversible hygiene proposals */}
+      <TrustPanel leads={leads} onEvidence={handleEvidence} onLeadsSaved={setLeads} />
+
+      {/* Explainable ICP Fit Scoring */}
+      <AccountFitPanel
+        leads={leads}
+        evidenceByLead={evidenceByLead}
+        signalsByLead={signalsByLead}
+        onApplyOrder={(orderedIds) => {
+          const position = new Map(orderedIds.map((id, index) => [id, index]));
+          const reordered = [...leads].sort(
+            (a, b) => (position.get(a.id) ?? 9999) - (position.get(b.id) ?? 9999)
+          );
+          setLeads(reordered);
+          saveLeads(reordered);
+          showToast("Account Fit Order Applied", "Board ordered by your weighted fit score.", "success");
+        }}
+      />
+
       {/* Kanban & Table Board Component */}
+      <AgentWorkbench
+        leads={leads}
+        evidenceByLead={evidenceByLead}
+        onSignals={handleSignals}
+        onLeadsSaved={setLeads}
+      />
+
       <KanbanBoard
         leads={leads}
         onUpdateStage={handleUpdateStage}
@@ -175,7 +209,7 @@ export default function PipelinePage() {
                   <div className="flex items-center gap-2">
                     <h3 className="text-sm font-bold text-white">ChatGPT Lead Sorting & Intelligence</h3>
                     <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-950/60 text-emerald-400 border border-emerald-500/30">
-                      {aiSortResult?.provider || "ChatGPT Brain"}
+                      {aiSortResult?.provider || "No live ChatGPT result"}
                     </span>
                   </div>
                   <p className="text-xs text-zinc-400 font-mono mt-0.5">

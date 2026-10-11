@@ -4,6 +4,7 @@ import React, { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { EmailComposer } from "@/components/outreach/EmailComposer";
 import { OutreachStats } from "@/components/outreach/OutreachStats";
+import { ReplyDecoder } from "@/components/outreach/ReplyDecoder";
 import { getStoredLeads, updateLeadStage } from "@/lib/storage";
 import { Lead, PipelineStage } from "@/types";
 import { Send, Sparkles, Mail, CheckCircle } from "lucide-react";
@@ -68,6 +69,8 @@ function OutreachContent() {
       )}
 
       {/* Playbook and Heuristics */}
+      <ReplyDecoder leads={leads} />
+
       <OutreachStats />
     </div>
   );

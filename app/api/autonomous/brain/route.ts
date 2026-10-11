@@ -1,395 +1,222 @@
 import { NextResponse } from "next/server";
+import { requestChatGptJson, getChatGptModel, missingKeyMessage, PRIMARY_KEY_NAME } from "@/lib/chatgpt";
+import type { AgentReport, LeadVerdict, LeadVerdictStatus } from "@/types";
+
+interface RawVerdict {
+  leadId?: unknown;
+  company?: unknown;
+  status?: unknown;
+  qualificationScore?: unknown;
+  confidence?: unknown;
+  reliableFields?: unknown;
+  issues?: unknown;
+  recommendedAction?: unknown;
+  rationale?: unknown;
+}
+
+function toNumber(value: unknown, fallback = 0): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function normaliseVerdict(raw: RawVerdict, knownLeadIds: Set<string>): LeadVerdict | null {
+  const leadId = typeof raw.leadId === "string" ? raw.leadId : "";
+  if (!leadId || !knownLeadIds.has(leadId)) return null;
+
+  const statusValue = String(raw.status || "");
+  const status: LeadVerdictStatus =
+    statusValue === "qualified" || statusValue === "disqualified" ? (statusValue as LeadVerdictStatus) : "needs_review";
+
+  return {
+    leadId,
+    company: typeof raw.company === "string" ? raw.company : "",
+    status,
+    qualificationScore: Math.max(0, Math.min(100, Math.round(toNumber(raw.qualificationScore, 50)))),
+    confidence: Math.max(0, Math.min(1, toNumber(raw.confidence, 0.5))),
+    reliableFields: Array.isArray(raw.reliableFields) ? raw.reliableFields.map(String) : [],
+    issues: Array.isArray(raw.issues) ? raw.issues.map(String) : [],
+    recommendedAction: typeof raw.recommendedAction === "string" ? raw.recommendedAction : "Review manually",
+    rationale: typeof raw.rationale === "string" ? raw.rationale : "",
+  };
+}
 
 export async function GET() {
-  const apiKey =
-    process.env.CHATGPT_API ||
-    process.env.OPENAI_API_KEY ||
-    process.env.CHATGPT_API_KEY;
-
   return NextResponse.json({
     status: "ok",
-    hasApiKey: Boolean(apiKey && apiKey.trim().length > 0),
-    engine: "ChatGPT Brain",
-    envKey: "CHATGPT_API",
+    role: "Lead qualification, verification, email copy and reporting. Does not source leads.",
+    envKey: PRIMARY_KEY_NAME,
+    model: getChatGptModel(),
+    ready: true,
   });
 }
 
 export async function POST(req: Request) {
+  let body: any;
   try {
-    const body = await req.json();
-    const { targetNiche, targetCity, batchSize = 3 } = body;
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ success: false, status: "bad_request", error: "Body must be JSON." }, { status: 400 });
+  }
 
-    const niche = targetNiche || "Commercial Real Estate Development";
-    const city = targetCity || "Lagos, Nigeria";
+  const leads = Array.isArray(body?.leads) ? body.leads : [];
+  if (leads.length === 0) {
+    return NextResponse.json({
+      success: false,
+      status: "no_leads",
+      error: "No leads were supplied to qualify. Run an Apollo prospecting search first, then qualify the records it stored.",
+      verdicts: [],
+      report: null,
+    });
+  }
 
-    const apiKey =
-      process.env.CHATGPT_API ||
-      process.env.OPENAI_API_KEY ||
-      process.env.CHATGPT_API_KEY;
+  const knownLeadIds = new Set<string>(leads.map((l: any) => String(l.id)));
+  const niche = body?.targetNiche || "not specified";
+  const city = body?.targetCity || "not specified";
 
-    if (apiKey && apiKey.trim().length > 0) {
-      try {
-        const systemPrompt = `You are the Autonomous Sales Research Brain of Iwaju Marketing OS.
-You take a target (niche plus city), research candidate companies, and extract structured facts with exact sources and confidence scores (0.00 to 1.00).
+  const systemPrompt = `You are the Lead Qualification and Reporting Brain of Iwaju Marketing OS.
 
-Strict Comp AI Evidence Rules:
-- Strong facts (confidence >= 0.80):
-  * "dns.mx-record" (0.95): Primary corporate email validated via MX server.
-  * "corporate.registry" (0.90): Managing director / executive confirmed on statutory filings.
-  * "crm.signature-block" (0.82): Direct telephone line confirmed on executive email signature.
-  * status must be "auto_applied".
-- Weak facts (confidence < 0.80):
-  * "web.cited-claim" (0.65): Observed client bundle tech stack (React, Next.js, Stripe, etc.).
-  * "search.cites-profile" (0.54): Estimated annual deal potential / retainer range.
-  * "handle.name-form" (0.42): Direct personal mobile / WhatsApp handle inferred from forum/directory.
-  * status must be "pending_approval" (held for human rep verification).
+Your job is AUDIT, not discovery. You never invent companies, contacts, phone numbers, emails, deal values or any other record. You only reason about the lead records handed to you, and you judge whether each one is trustworthy enough to spend outreach effort on.
 
-Always return valid JSON only matching the schema:
+For every lead you receive, return exactly one verdict:
+- "qualified": the contact data is internally consistent and the account fits the target.
+- "needs_review": promising but at least one field is doubtful or missing.
+- "disqualified": bad fit, dead contact data, or records that contradict each other.
+
+Checks to apply on the real data only:
+- Does the email domain match the company website domain? A Gmail/Outlook/Yahoo/Yandex address for a stated corporate contact is a red flag.
+- Is the phone number present, correctly formatted, and plausible for the stated location?
+- Do name and title exist and look like a real decision maker rather than a generic role address (info@, sales@, support@)?
+- Is the deal value consistent with the company size and stage recorded, or an unsupported guess?
+- Do the notes and tags contradict each other?
+
+Confidence is about YOUR assessment, not a claim that any record was verified against a registry, DNS or LinkedIn. Never describe anything as verified unless the input itself states the verification source. Set "reliableFields" to the field names you judged consistent, and "issues" to concrete problems a human can act on.
+
+Also produce a portfolio report over the whole batch you were given.
+
+Return JSON only, matching:
 {
-  "companies": [
+  "verdicts": [
     {
-      "name": "Company Name",
-      "domain": "companydomain.com",
-      "niche": "${niche}",
-      "location": "${city}",
-      "dealValue": "₦25,000,000 ARR Retainer",
-      "rawDealValue": 25000000,
-      "decisionMaker": "Executive Name",
-      "title": "Job Title",
-      "email": "exec@companydomain.com",
-      "phone": "+234 803 123 4567",
-      "employees": "40-60 staff",
-      "techStack": ["Next.js", "AWS", "Stripe"],
-      "summary": "1-2 sentence account summary",
-      "facts": [
-        {
-          "field": "email",
-          "fieldLabel": "Primary Corporate Email",
-          "value": "exec@companydomain.com",
-          "source": "dns.mx-record",
-          "method": "dns_handshake",
-          "kind": "primary",
-          "confidence": 0.95,
-          "scoreBand": "strong",
-          "status": "auto_applied",
-          "rationale": "Corporate MX record verified with 0% bounce probability."
-        },
-        {
-          "field": "decisionMaker",
-          "fieldLabel": "Decision Maker & Title",
-          "value": "Executive Name (Job Title)",
-          "source": "corporate.registry",
-          "method": "corporate_registry",
-          "kind": "primary",
-          "confidence": 0.90,
-          "scoreBand": "strong",
-          "status": "auto_applied",
-          "rationale": "Official registrar statutory filing confirms executive officer."
-        },
-        {
-          "field": "phone",
-          "fieldLabel": "Direct Corporate Phone",
-          "value": "+234 803 123 4567",
-          "source": "crm.signature-block",
-          "method": "signature_block",
-          "kind": "primary",
-          "confidence": 0.82,
-          "scoreBand": "strong",
-          "status": "auto_applied",
-          "rationale": "Signature block telephone verified on inbound correspondence."
-        },
-        {
-          "field": "techStack",
-          "fieldLabel": "Production Tech Stack",
-          "value": "Next.js, Tailwind, AWS, Stripe",
-          "source": "web.cited-claim",
-          "method": "web_crawler",
-          "kind": "supporting",
-          "confidence": 0.65,
-          "scoreBand": "weak",
-          "status": "pending_approval",
-          "rationale": "Detected from client bundle headers. Held as suggestion for rep confirmation."
-        },
-        {
-          "field": "dealValue",
-          "fieldLabel": "Estimated Deal Potential",
-          "value": "₦25,000,000 ARR Retainer",
-          "source": "search.cites-profile",
-          "method": "search_snippet",
-          "kind": "supporting",
-          "confidence": 0.54,
-          "scoreBand": "weak",
-          "status": "pending_approval",
-          "rationale": "Calculated from headcount and industry benchmark. Held for rep approval."
-        },
-        {
-          "field": "directMobile",
-          "fieldLabel": "Direct Personal Mobile",
-          "value": "+234 802 999 8888 (Personal WhatsApp)",
-          "source": "handle.name-form",
-          "method": "handle_inference",
-          "kind": "weak",
-          "confidence": 0.42,
-          "scoreBand": "weak",
-          "status": "pending_approval",
-          "rationale": "Personal handle found in developer index. Held back for rep verification."
-        }
-      ]
+      "leadId": "exact input id",
+      "company": "company from input",
+      "status": "qualified" | "needs_review" | "disqualified",
+      "qualificationScore": 0-100,
+      "confidence": 0.00-1.00,
+      "reliableFields": ["email", "phone"],
+      "issues": ["Email uses gmail.com but company domain is example.com"],
+      "recommendedAction": "Send qualified cold email today",
+      "rationale": "1-2 sentences grounded only in the supplied fields."
     }
-  ]
+  ],
+  "report": {
+    "headline": "short summary line",
+    "executiveSummary": "3-4 sentences on pipeline health and what the pass found",
+    "dataQualityFindings": ["patterns of bad data across this batch"],
+    "topTargets": [{ "leadId": "input id", "company": "name", "why": "one sentence" }],
+    "nextActions": ["ordered actions for the rep"]
+  }
 }`;
 
-        const openAiRes = await fetch("https://api.openai.com/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${apiKey.trim()}`,
-          },
-          body: JSON.stringify({
-            model: "gpt-4o-mini",
-            messages: [
-              { role: "system", content: systemPrompt },
-              {
-                role: "user",
-                content: `Research ${batchSize} companies for niche: "${niche}" in city: "${city}". Return JSON with structured companies and extracted facts.`,
-              },
-            ],
-            response_format: { type: "json_object" },
-            temperature: 0.3,
-          }),
-        });
+  const userPrompt = `Target this pass was run for: niche "${niche}" in "${city}".
 
-        if (openAiRes.ok) {
-          const aiJson = await openAiRes.json();
-          const content = aiJson?.choices?.[0]?.message?.content;
-          if (content) {
-            const parsed = JSON.parse(content);
-            if (Array.isArray(parsed.companies) && parsed.companies.length > 0) {
-              return NextResponse.json({
-                success: true,
-                provider: "ChatGPT (GPT-4o-mini)",
-                isLiveChatGPT: true,
-                companies: parsed.companies,
-              });
-            }
-          }
-        } else {
-          const errData = await openAiRes.text();
-          console.warn("OpenAI API call returned error:", errData);
-        }
-      } catch (err: any) {
-        console.warn("Failed calling OpenAI:", err.message);
-      }
-    }
+Qualify and audit these ${leads.length} stored leads, then write the report:
 
-    // Built-in intelligent heuristic engine (graceful fallback if API key not yet entered or network error)
-    const cityName = city.split(",")[0].trim();
-    const isFintech = niche.toLowerCase().includes("fintech") || niche.toLowerCase().includes("pay");
-    const isHVAC = niche.toLowerCase().includes("hvac") || niche.toLowerCase().includes("mechanical");
-    const isLegal = niche.toLowerCase().includes("law") || niche.toLowerCase().includes("legal");
-    const isSaaS = niche.toLowerCase().includes("saas") || niche.toLowerCase().includes("software");
+${JSON.stringify(
+    leads.map((l: any) => ({
+      id: l.id,
+      company: l.company,
+      name: l.name,
+      title: l.title,
+      email: l.email,
+      phone: l.phone,
+      website: l.website,
+      niche: l.niche,
+      location: l.location,
+      stage: l.stage,
+      dealValue: l.dealValue,
+      currency: l.currency,
+      score: l.score,
+      tags: l.tags,
+      notes: l.notes,
+      createdAt: l.createdAt,
+    })),
+    null,
+    1
+  )}`;
 
-    const fallbackCompanies = [
-      {
-        name: isHVAC
-          ? `${cityName} Climate & Commercial Systems`
-          : isFintech
-          ? `${cityName} PayBridge Africa Technologies`
-          : isLegal
-          ? `${cityName} Sterling & Balogun Chambers`
-          : isSaaS
-          ? `CloudScale ${cityName} Systems`
-          : `${cityName} Premier ${niche.split("&")[0].trim()} Co`,
-        domain: isHVAC
-          ? `${cityName.toLowerCase().replace(/\s+/g, "")}climatesys.com`
-          : isFintech
-          ? `paybridge-${cityName.toLowerCase().replace(/\s+/g, "")}.io`
-          : isLegal
-          ? `sterlingbalogun-${cityName.toLowerCase().replace(/\s+/g, "")}.law`
-          : isSaaS
-          ? `cloudscale-${cityName.toLowerCase().replace(/\s+/g, "")}.io`
-          : `${cityName.toLowerCase().replace(/\s+/g, "")}holdings.com`,
-        niche,
-        location: city,
-        dealValue: "₦22,000,000 ARR Retainer",
-        rawDealValue: 22000000,
-        decisionMaker: "Engr. Dapo Alabi",
-        title: "Managing Director & Chief Executive",
-        email: `d.alabi@${cityName.toLowerCase().replace(/\s+/g, "")}corp.com`,
-        phone: "+234 803 711 9024",
-        employees: "35-50 staff",
-        techStack: ["Next.js", "AWS Cloud", "Stripe", "Tailwind CSS"],
-        summary: `Established enterprise account in ${city} operating in ${niche}. Researched via Iwaju Agent Loop.`,
-        facts: [
-          {
-            field: "email",
-            fieldLabel: "Primary Corporate Email",
-            value: `d.alabi@${cityName.toLowerCase().replace(/\s+/g, "")}corp.com`,
-            source: "dns.mx-record",
-            method: "dns_handshake",
-            kind: "primary",
-            confidence: 0.95,
-            scoreBand: "strong",
-            status: "auto_applied",
-            rationale: "Corporate mail exchange validated with zero bounce risk.",
-          },
-          {
-            field: "decisionMaker",
-            fieldLabel: "Decision Maker & Title",
-            value: "Engr. Dapo Alabi (Managing Director)",
-            source: "corporate.registry",
-            method: "corporate_registry",
-            kind: "primary",
-            confidence: 0.9,
-            scoreBand: "strong",
-            status: "auto_applied",
-            rationale: "CAC statutory filing confirms executive directorship with shareholding authority.",
-          },
-          {
-            field: "phone",
-            fieldLabel: "Direct Corporate Phone",
-            value: "+234 803 711 9024",
-            source: "crm.signature-block",
-            method: "signature_block",
-            kind: "primary",
-            confidence: 0.82,
-            scoreBand: "strong",
-            status: "auto_applied",
-            rationale: "Managing Director official email signature block verified on inbound correspondence.",
-          },
-          {
-            field: "techStack",
-            fieldLabel: "Observed Tech Stack",
-            value: "Next.js, AWS Cloud, Stripe, Tailwind CSS",
-            source: "web.cited-claim",
-            method: "web_crawler",
-            kind: "supporting",
-            confidence: 0.65,
-            scoreBand: "weak",
-            status: "pending_approval",
-            rationale: "Client bundle script scan detected web frameworks. Held as suggestion for human review.",
-          },
-          {
-            field: "dealValue",
-            fieldLabel: "Estimated Deal Potential",
-            value: "₦22,000,000 ARR Retainer",
-            source: "search.cites-profile",
-            method: "search_snippet",
-            kind: "supporting",
-            confidence: 0.54,
-            scoreBand: "weak",
-            status: "pending_approval",
-            rationale: "Calculated from employee headcount and market tier. Held for rep approval.",
-          },
-          {
-            field: "directMobile",
-            fieldLabel: "Direct Personal Mobile",
-            value: "+234 802 334 1190 (Personal WhatsApp)",
-            source: "handle.name-form",
-            method: "handle_inference",
-            kind: "weak",
-            confidence: 0.42,
-            scoreBand: "weak",
-            status: "pending_approval",
-            rationale: "Personal contact handle inferred from open index. Held back for rep verification.",
-          },
-        ],
-      },
-      {
-        name: isHVAC
-          ? "Lone Star Thermal Solutions & Chillers"
-          : isFintech
-          ? "Kuda Transact Enterprise Infrastructure"
-          : isLegal
-          ? "Lexington Commercial Counsel LLP"
-          : isSaaS
-          ? "OmniFlow Automation Labs"
-          : `Apex ${niche.split("&")[0].trim()} Holdings`,
-        domain: isHVAC
-          ? "lonestarthermal.com"
-          : isFintech
-          ? "kudatransact.ng"
-          : isLegal
-          ? "lexingtoncounsel.com"
-          : isSaaS
-          ? "omniflowlabs.com"
-          : `apex-${cityName.toLowerCase().replace(/\s+/g, "")}.com`,
-        niche,
-        location: city,
-        dealValue: "₦17,500,000 ARR Retainer",
-        rawDealValue: 17500000,
-        decisionMaker: "Zainab Mohammed-Bello",
-        title: "Chief Operating Officer & VP Partnerships",
-        email: "zainab.bello@transactholdings.com",
-        phone: "+234 818 903 4412",
-        employees: "40-60 staff",
-        techStack: ["React", "Node.js", "PostgreSQL", "Cloudflare Enterprise"],
-        summary: `High-growth commercial player in ${city}. Verified via Iwaju Autonomous Agent.`,
-        facts: [
-          {
-            field: "email",
-            fieldLabel: "Primary Corporate Email",
-            value: "zainab.bello@transactholdings.com",
-            source: "dns.mx-record",
-            method: "dns_handshake",
-            kind: "primary",
-            confidence: 0.95,
-            scoreBand: "strong",
-            status: "auto_applied",
-            rationale: "Corporate mail server validated with zero bounce risk.",
-          },
-          {
-            field: "decisionMaker",
-            fieldLabel: "Decision Maker & Title",
-            value: "Zainab Mohammed-Bello (Chief Operating Officer)",
-            source: "linkedin.employer-and-name",
-            method: "linkedin_verified",
-            kind: "primary",
-            confidence: 0.88,
-            scoreBand: "strong",
-            status: "auto_applied",
-            rationale: "LinkedIn employer and title match confirmed.",
-          },
-          {
-            field: "techStack",
-            fieldLabel: "Production Tech Stack",
-            value: "React, Node.js, PostgreSQL, Cloudflare Enterprise",
-            source: "web.cited-claim",
-            method: "web_crawler",
-            kind: "supporting",
-            confidence: 0.68,
-            scoreBand: "weak",
-            status: "pending_approval",
-            rationale: "Observed Cloudflare Enterprise and React headers on public endpoint.",
-          },
-          {
-            field: "directMobile",
-            fieldLabel: "Direct Personal Mobile",
-            value: "+234 809 110 5543 (Personal Line)",
-            source: "handle.name-form",
-            method: "handle_inference",
-            kind: "weak",
-            confidence: 0.45,
-            scoreBand: "weak",
-            status: "pending_approval",
-            rationale: "Personal contact handle inferred from open index. Held back for rep verification.",
-          },
-        ],
-      },
-    ];
+  const result = await requestChatGptJson<{ verdicts?: RawVerdict[]; report?: any }>(systemPrompt, userPrompt, 0.2);
 
+  if (!result.ok) {
     return NextResponse.json({
-      success: true,
-      provider: "Built-in Heuristic Brain",
-      isLiveChatGPT: false,
-      notice:
-        "Using built-in intelligent engine. To enable live ChatGPT autonomous research, ensure CHATGPT_API is defined in your Vercel Environment Variables.",
-      companies: fallbackCompanies,
+      success: false,
+      status: result.status,
+      error: result.status === "no_key" ? missingKeyMessage() : result.message,
+      verdicts: [],
+      report: null,
     });
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err.message || "Failed to execute agent loop research." },
-      { status: 500 }
-    );
   }
+
+  const verdicts = (Array.isArray(result.data?.verdicts) ? result.data.verdicts : [])
+    .map((v) => normaliseVerdict(v, knownLeadIds))
+    .filter((v): v is LeadVerdict => v !== null);
+
+  if (verdicts.length === 0) {
+    return NextResponse.json({
+      success: false,
+      status: "parse_error",
+      error: "ChatGPT returned no verdicts matching the supplied lead ids.",
+      verdicts: [],
+      report: null,
+    });
+  }
+
+  const report = buildReport(result.data?.report, verdicts);
+
+  return NextResponse.json({
+    success: true,
+    status: "live",
+    provider: `ChatGPT (${result.model})`,
+    isLiveChatGPT: true,
+    verdicts,
+    report,
+  });
+}
+
+function buildReport(raw: any, verdicts: LeadVerdict[]): AgentReport {
+  const qualifiedCount = verdicts.filter((v) => v.status === "qualified").length;
+  const needsReviewCount = verdicts.filter((v) => v.status === "needs_review").length;
+  const disqualifiedCount = verdicts.filter((v) => v.status === "disqualified").length;
+  const averageScore = Math.round(verdicts.reduce((sum, v) => sum + v.qualificationScore, 0) / verdicts.length);
+
+  const fallbackTop = [...verdicts]
+    .sort((a, b) => b.qualificationScore - a.qualificationScore)
+    .slice(0, 3)
+    .map((v) => ({ leadId: v.leadId, company: v.company, why: v.rationale || v.recommendedAction }));
+
+  const findingsFromVerdicts = Array.from(new Set(verdicts.flatMap((v) => v.issues))).slice(0, 8);
+
+  return {
+    headline: typeof raw?.headline === "string" && raw.headline ? raw.headline : `${verdicts.length} leads audited`,
+    executiveSummary:
+      typeof raw?.executiveSummary === "string" && raw.executiveSummary
+        ? raw.executiveSummary
+        : `${qualifiedCount} qualified, ${needsReviewCount} need review, ${disqualifiedCount} disqualified.`,
+    reviewedCount: verdicts.length,
+    qualifiedCount,
+    needsReviewCount,
+    disqualifiedCount,
+    averageScore,
+    dataQualityFindings:
+      Array.isArray(raw?.dataQualityFindings) && raw.dataQualityFindings.length > 0
+        ? raw.dataQualityFindings.map(String)
+        : findingsFromVerdicts,
+    topTargets:
+      Array.isArray(raw?.topTargets) && raw.topTargets.length > 0
+        ? raw.topTargets
+            .filter((t: any) => typeof t?.leadId === "string")
+            .map((t: any) => ({ leadId: t.leadId, company: String(t.company || ""), why: String(t.why || "") }))
+        : fallbackTop,
+    nextActions:
+      Array.isArray(raw?.nextActions) && raw.nextActions.length > 0 ? raw.nextActions.map(String) : verdicts.slice(0, 5).map((v) => v.recommendedAction),
+  };
 }

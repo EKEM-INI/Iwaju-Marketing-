@@ -1,16 +1,13 @@
 import { NextResponse } from "next/server";
+import { getChatGptKey, getChatGptModel, requestChatGptJson, PRIMARY_KEY_NAME } from "@/lib/chatgpt";
 
 export async function GET() {
-  const apiKey =
-    process.env.CHATGPT_API ||
-    process.env.OPENAI_API_KEY ||
-    process.env.CHATGPT_API_KEY;
-
   return NextResponse.json({
     status: "ok",
-    hasApiKey: Boolean(apiKey && apiKey.trim().length > 0),
+    hasApiKey: Boolean(getChatGptKey()),
     engine: "ChatGPT Lead Sorting & Qualification Brain",
-    envKey: "CHATGPT_API",
+    envKey: PRIMARY_KEY_NAME,
+    model: getChatGptModel(),
   });
 }
 
@@ -19,12 +16,9 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { leads = [], sortBy = "deal_potential", customDirective = "" } = body;
 
-    const apiKey =
-      process.env.CHATGPT_API ||
-      process.env.OPENAI_API_KEY ||
-      process.env.CHATGPT_API_KEY;
+    let aiFailure: string | null = null;
 
-    if (apiKey && apiKey.trim().length > 0 && Array.isArray(leads) && leads.length > 0) {
+    if (getChatGptKey() && Array.isArray(leads) && leads.length > 0) {
       try {
         const systemPrompt = `You are the Lead Intelligence & Sorting Brain of Iwaju Marketing OS.
 Your mission is to deeply review candidate B2B leads, evaluate their commercial potential, analyze their buying signals and pain points, score them, and sort them in optimal outreach order.
@@ -89,48 +83,29 @@ ${JSON.stringify(
   2
 )}`;
 
-        const openAiRes = await fetch("https://api.openai.com/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${apiKey.trim()}`,
-          },
-          body: JSON.stringify({
-            model: "gpt-4o-mini",
-            messages: [
-              { role: "system", content: systemPrompt },
-              { role: "user", content: userPrompt },
-            ],
-            response_format: { type: "json_object" },
-            temperature: 0.2,
-          }),
-        });
-
-        if (openAiRes.ok) {
-          const aiJson = await openAiRes.json();
-          const content = aiJson?.choices?.[0]?.message?.content;
-          if (content) {
-            const parsed = JSON.parse(content);
-            if (Array.isArray(parsed.sortedLeads) && parsed.sortedLeads.length > 0) {
-              return NextResponse.json({
-                success: true,
-                provider: "ChatGPT (GPT-4o-mini)",
-                isLiveChatGPT: true,
-                executiveSummary: parsed.executiveSummary,
-                averageScore: parsed.averageScore,
-                tierACount: parsed.tierACount,
-                totalDealValueEstimate: parsed.totalDealValueEstimate,
-                sortedLeads: parsed.sortedLeads,
-              });
-            }
-          }
+        const result = await requestChatGptJson<any>(systemPrompt, userPrompt, 0.2);
+        if (result.ok && Array.isArray(result.data?.sortedLeads) && result.data.sortedLeads.length > 0) {
+          return NextResponse.json({
+            success: true,
+            status: "live",
+            provider: `ChatGPT (${result.model})`,
+            isLiveChatGPT: true,
+            executiveSummary: result.data.executiveSummary,
+            averageScore: result.data.averageScore,
+            tierACount: result.data.tierACount,
+            totalDealValueEstimate: result.data.totalDealValueEstimate,
+            sortedLeads: result.data.sortedLeads,
+          });
         }
+        aiFailure = result.ok ? "ChatGPT returned no sorted leads." : result.message;
       } catch (e: any) {
-        console.warn("ChatGPT lead sorting error, using heuristic fallback:", e?.message);
+        aiFailure = e?.message || "Lead sorting failed.";
+        console.warn("ChatGPT lead sorting error, using rule fallback:", e?.message);
       }
     }
 
-    // Heuristic Fallback
+    // Rule-based fallback: orders the real stored leads by recorded deal value.
+    // No analysis is performed, so no insight fields are invented.
     const sorted = [...leads].sort((a: any, b: any) => {
       const valA = Number(a.dealValue) || 0;
       const valB = Number(b.dealValue) || 0;
@@ -138,24 +113,23 @@ ${JSON.stringify(
     });
 
     const evaluatedLeads = sorted.map((lead: any, idx: number) => {
-      const val = Number(lead.dealValue) || 15000000;
-      const score = Math.min(98, Math.max(70, Math.floor(80 + (val / 10000000) * 3 - idx * 2)));
-      const isTierA = score >= 88;
-      const isTierB = score >= 78 && !isTierA;
+      const val = Number(lead.dealValue) || 0;
+      const isTierA = idx === 0 && val > 0;
+      const isTierB = idx > 0 && idx < Math.ceil(sorted.length / 3) && val > 0;
 
       return {
         leadId: lead.id,
         company: lead.company,
         rank: idx + 1,
-        qualificationScore: score,
+        qualificationScore: Number(lead.score) || 0,
         tier: isTierA
           ? "Tier A - High Priority"
           : isTierB
           ? "Tier B - Medium Priority"
           : "Tier C - Low / Nurture",
-        dealProbability: Number(((score * 0.95) / 100).toFixed(2)),
-        primaryPainPoint: `High operational friction in B2B client acquisition across ${lead.location || "regional"} enterprise markets.`,
-        strategicAngle: `Lead with verified deal velocity and direct outbound automation for ${lead.niche || "their sector"}.`,
+        dealProbability: 0,
+        primaryPainPoint: "Not analysed - no ChatGPT key configured.",
+        strategicAngle: "Not analysed - no ChatGPT key configured.",
         recommendedAction: isTierA
           ? "Send personalized executive cold email sequence within 2 hours"
           : "Queue for automated multi-touch follow up sequence",
@@ -164,11 +138,14 @@ ${JSON.stringify(
 
     return NextResponse.json({
       success: true,
-      provider: "Built-in Heuristic Brain",
+      status: "rules",
+      provider: "Rule-based ordering (no AI used)",
       isLiveChatGPT: false,
-      notice:
-        "Using built-in intelligent sorting engine. To activate live ChatGPT lead triage, set CHATGPT_API in Vercel Environment Variables.",
-      executiveSummary: `Analyzed ${leads.length} accounts. Top opportunities ranked by commercial deal potential, corporate verification confidence, and executive response likelihood.`,
+      error: getChatGptKey() ? aiFailure : null,
+      notice: getChatGptKey()
+        ? `ChatGPT sorting failed (${aiFailure}). Showing plain deal-value ordering instead.`
+        : `No lead analysis was performed. Set ${PRIMARY_KEY_NAME} in Vercel Environment Variables and redeploy to enable ChatGPT qualification.`,
+      executiveSummary: `Sorted ${leads.length} stored leads by recorded deal value. No AI qualification ran.`,
       averageScore: Math.round(
         evaluatedLeads.reduce((acc: number, l: any) => acc + l.qualificationScore, 0) /
           (evaluatedLeads.length || 1)

@@ -1,9 +1,11 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { Lead, EmailTemplate } from "@/types";
+import React, { useState, useEffect, useMemo } from "react";
+import { Lead, EmailTemplate, AIComposedEmail } from "@/types";
 import { EMAIL_TEMPLATES, interpolateTemplate } from "@/lib/email-templates";
+import { factsFromLead, stripCitations } from "@/lib/outreach-facts";
 import { TemplateSelector } from "@/components/outreach/TemplateSelector";
+import { ComposeAudit } from "@/components/outreach/ComposeAudit";
 import { useToast } from "@/components/ui/Toast";
 import {
   Copy,
@@ -19,7 +21,15 @@ import {
   Globe,
   Bot,
   RefreshCw,
+  ClipboardList,
 } from "lucide-react";
+
+const TONES = [
+  { id: "direct", label: "Direct" },
+  { id: "consultative", label: "Consultative" },
+  { id: "peer_to_peer", label: "Peer to peer" },
+  { id: "short_question", label: "Short question" },
+];
 
 interface EmailComposerProps {
   leads: Lead[];
@@ -45,6 +55,10 @@ export function EmailComposer({
   const [markedContacted, setMarkedContacted] = useState(false);
   const [showClientMenu, setShowClientMenu] = useState(false);
   const [isAiGenerating, setIsAiGenerating] = useState(false);
+  const [tone, setTone] = useState("direct");
+  const [senderName, setSenderName] = useState("Cyril Charles");
+  const [approvals, setApprovals] = useState<Record<string, boolean>>({});
+  const [audit, setAudit] = useState<AIComposedEmail | null>(null);
 
   // Update selected lead if initialLeadId changes from query params
   useEffect(() => {
@@ -73,7 +87,16 @@ export function EmailComposer({
     setSubjectText(interpolated.subject);
     setBodyText(interpolated.body);
     setMarkedContacted(false);
+    setAudit(null);
   }, [selectedLeadId, selectedTemplate.id]);
+
+  const candidateFacts = useMemo(
+    () => (currentLead ? factsFromLead(currentLead) : []),
+    [currentLead]
+  );
+
+  const isFactApproved = (fact: { id: string; approvedByDefault: boolean }) =>
+    approvals[fact.id] ?? fact.approvedByDefault;
 
   const handleCopySubject = () => {
     navigator.clipboard.writeText(subjectText);
@@ -168,39 +191,59 @@ export function EmailComposer({
   };
 
   /**
-   * AI Personalization Generator
-   * Re-synthesizes the email hook using company niche, location, and decision maker role
+   * Grounded compose: the writer receives only the facts the rep has ticked as confirmed
+   * and must cite each one back. It refuses to fall back to template copy.
    */
-  const handleAiEnhance = () => {
+  const handleAiEnhance = async () => {
     if (!currentLead) return;
     setIsAiGenerating(true);
+    try {
+      const res = await fetch("/api/outreach/ai-compose", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lead: {
+            name: currentLead.name,
+            title: currentLead.title,
+            company: currentLead.company,
+            niche: currentLead.niche,
+            location: currentLead.location,
+          },
+          tone,
+          senderName,
+          facts: candidateFacts.map((f) => ({
+            id: f.id,
+            field: f.field,
+            value: f.value,
+            verified: isFactApproved(f),
+            source: f.source,
+          })),
+        }),
+      });
+      const data: AIComposedEmail = await res.json();
+      setAudit(data);
 
-    setTimeout(() => {
-      const firstName = currentLead.name.split(" ")[0] || currentLead.name;
-      const enhancedSubject = `Strategic B2B Pipeline Growth for ${currentLead.company} (${currentLead.location})`;
-      const enhancedBody = `Hi ${firstName},
-
-I've been following ${currentLead.company}'s recent positioning in the ${currentLead.niche} sector across ${currentLead.location}. Given your executive leadership as ${currentLead.title}, I wanted to share a quick operational perspective.
-
-Most ${currentLead.niche} organizations in ${currentLead.location} face significant friction securing predictable high-ticket client meetings without burning capital on unfocused outreach.
-
-At Iwaju Marketing, we deploy dedicated outbound pipeline systems tailored specifically for ${currentLead.niche} operators. We recently helped a peer account in your space generate ₦28M+ in qualified pipeline in under 60 days.
-
-Are you available for a brief 10-minute briefing this Thursday at 2:00 PM to see how we can replicate this for ${currentLead.company}?
-
-Best regards,
-Tunde Balogun
-Growth Lead | Iwaju Marketing`;
-
-      setSubjectText(enhancedSubject);
-      setBodyText(enhancedBody);
+      if (data.success && data.body) {
+        setSubjectText(stripCitations(data.subject));
+        setBodyText(stripCitations(data.body));
+        showToast(
+          "Grounded Draft Written",
+          `${data.provider} wrote using ${data.citedFacts?.length ?? 0} approved fact(s).`,
+          "success"
+        );
+      } else {
+        showToast(
+          data.status === "no_key" ? "No Live Key" : "Nothing Drafted",
+          data.error || "The writer returned no copy.",
+          "info"
+        );
+      }
+    } catch (err: any) {
+      setAudit(null);
+      showToast("Compose Failed", `Could not reach the outreach writer: ${err?.message}`, "error");
+    } finally {
       setIsAiGenerating(false);
-      showToast(
-        "AI Copy Generated",
-        `Personalized outreach copy synthesized for ${currentLead.company}.`,
-        "success"
-      );
-    }, 800);
+    }
   };
 
   return (
@@ -264,38 +307,116 @@ Growth Lead | Iwaju Marketing`;
             onSelectTemplate={(tmpl) => setSelectedTemplate(tmpl)}
           />
         </div>
+
+        {/* Approved facts the writer may use */}
+        <div className="rounded-2xl bg-zinc-900/80 border border-zinc-800 p-5 backdrop-blur-md space-y-3">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
+              <ClipboardList className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Facts the writer may use</span>
+            </label>
+            <span className="text-[11px] text-zinc-500 font-mono">
+              {candidateFacts.filter(isFactApproved).length}/{candidateFacts.length} approved
+            </span>
+          </div>
+
+          <p className="text-[11px] text-zinc-500 leading-relaxed">
+            ChatGPT only states what you tick here, and must cite each one back. Personal
+            channels, deal values and free-text notes start unchecked.
+          </p>
+
+          <ul className="space-y-2 max-h-72 overflow-y-auto pr-1">
+            {candidateFacts.map((fact) => {
+              const approved = isFactApproved(fact);
+              return (
+                <li key={fact.id} className="rounded-xl bg-zinc-950/70 border border-zinc-800/80 p-3">
+                  <label className="flex items-start gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={approved}
+                      onChange={(e) =>
+                        setApprovals((prev) => ({ ...prev, [fact.id]: e.target.checked }))
+                      }
+                      className="mt-0.5 w-3.5 h-3.5 accent-emerald-500"
+                    />
+                    <span className="min-w-0">
+                      <span className="flex items-center gap-2">
+                        <span className="text-[11px] font-semibold text-zinc-200">{fact.label}</span>
+                        <span className="text-[10px] font-mono text-zinc-600">{fact.source}</span>
+                      </span>
+                      <span
+                        className={`block text-[11px] font-mono truncate ${
+                          approved ? "text-zinc-400" : "text-zinc-600 line-through"
+                        }`}
+                        title={fact.value}
+                      >
+                        {fact.value}
+                      </span>
+                      {!approved && fact.note && (
+                        <span className="block text-[10px] text-amber-400/80 leading-snug mt-0.5">
+                          {fact.note}
+                        </span>
+                      )}
+                    </span>
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       </div>
 
       {/* Right Column: Live Email Editor & Sender */}
       <div className="lg:col-span-7">
         <div className="rounded-2xl bg-zinc-900/80 border border-zinc-800 p-6 backdrop-blur-md space-y-5 flex flex-col h-full shadow-xl">
-          <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
+          <div className="space-y-4 pb-4 border-b border-zinc-800">
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-emerald-400" />
               <h3 className="text-sm sm:text-base font-bold text-white">
-                Personalized Cold Email Generator
+                Fact-Grounded Email Composer
               </h3>
             </div>
 
-            {/* AI Personalization Action */}
-            <button
-              onClick={handleAiEnhance}
-              disabled={isAiGenerating}
-              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition-all disabled:opacity-50"
-              title="Enhance email with AI personalized context"
-            >
-              {isAiGenerating ? (
-                <>
-                  <RefreshCw className="w-3 h-3 animate-spin" />
-                  <span>Synthesizing...</span>
-                </>
-              ) : (
-                <>
-                  <Bot className="w-3 h-3" />
-                  <span>Compose with ChatGPT Brain</span>
-                </>
-              )}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              {TONES.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => setTone(t.id)}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-mono border transition-colors cursor-pointer ${
+                    tone === t.id
+                      ? "bg-emerald-500 text-black font-semibold border-emerald-500"
+                      : "bg-zinc-950 text-zinc-400 hover:text-white border-zinc-800"
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+              <input
+                type="text"
+                value={senderName}
+                onChange={(e) => setSenderName(e.target.value)}
+                placeholder="Your name in the sign-off"
+                className="ml-auto w-44 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-1 text-[11px] text-zinc-200 focus:outline-none focus:border-emerald-500"
+              />
+              <button
+                onClick={handleAiEnhance}
+                disabled={isAiGenerating || candidateFacts.filter(isFactApproved).length === 0}
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition-all disabled:opacity-50"
+                title="Write from the approved facts only"
+              >
+                {isAiGenerating ? (
+                  <>
+                    <RefreshCw className="w-3 h-3 animate-spin" />
+                    <span>Writing...</span>
+                  </>
+                ) : (
+                  <>
+                    <Bot className="w-3 h-3" />
+                    <span>Compose with ChatGPT Brain</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
 
           {/* Subject Line */}
@@ -359,6 +480,24 @@ Growth Lead | Iwaju Marketing`;
               className="w-full flex-1 bg-zinc-950 border border-zinc-800 rounded-xl p-4 text-xs sm:text-sm text-zinc-200 focus:outline-none focus:border-emerald-500 leading-relaxed font-sans"
             />
           </div>
+
+          {audit && (
+            <div className="space-y-3 rounded-xl bg-zinc-950/60 border border-zinc-800 p-4">
+              <ComposeAudit email={audit} />
+
+              {audit.success && audit.followUpBody && (
+                <div className="pt-1 space-y-1.5">
+                  <div className="flex items-center justify-between text-[10px] font-mono uppercase text-zinc-500">
+                    <span>Follow-up (3 days later)</span>
+                    <span className="text-zinc-400 normal-case">{audit.followUpSubject}</span>
+                  </div>
+                  <p className="text-[11px] text-zinc-300 leading-relaxed whitespace-pre-line">
+                    {stripCitations(audit.followUpBody)}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Actions Bar */}
           <div className="pt-4 border-t border-zinc-800 flex flex-wrap items-center justify-between gap-3 relative">

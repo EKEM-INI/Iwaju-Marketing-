@@ -26,8 +26,10 @@ import {
   RefreshCw,
   Edit3,
 } from "lucide-react";
-import { getStoredLeads, saveSingleLead, logActivity, saveLeads } from "@/lib/storage";
-import { Lead, FactItem, AutonomousAccount, AISortResult, AIComposedEmail, EvaluatedLead } from "@/types";
+import { getStoredLeads, logActivity, saveLeads } from "@/lib/storage";
+import { factsFromLead, stripCitations } from "@/lib/outreach-facts";
+import { ComposeAudit } from "@/components/outreach/ComposeAudit";
+import { Lead, FactItem, AutonomousAccount, AISortResult, AIComposedEmail, EvaluatedLead, LeadVerdict, AgentReport } from "@/types";
 
 const INITIAL_FACTS: FactItem[] = [
   // Apex Prime Realty
@@ -387,6 +389,28 @@ const INITIAL_ACCOUNTS: AutonomousAccount[] = [
   },
 ];
 
+function reportAsText(report: AgentReport): string {
+  return [
+    "IWAJU MARKETING — LEAD QUALIFICATION REPORT",
+    report.headline,
+    "",
+    `Audited: ${report.reviewedCount} | Qualified: ${report.qualifiedCount} | Needs review: ${report.needsReviewCount} | Disqualified: ${report.disqualifiedCount} | Avg score: ${report.averageScore}`,
+    "",
+    report.executiveSummary,
+    "",
+    "DATA QUALITY FINDINGS",
+    ...report.dataQualityFindings.map((f) => `- ${f}`),
+    "",
+    "TOP TARGETS",
+    ...report.topTargets.map((t) => `- ${t.company}: ${t.why}`),
+    "",
+    "NEXT ACTIONS",
+    ...report.nextActions.map((a, i) => `${i + 1}. ${a}`),
+    "",
+    "Assessment only: ChatGPT judged stored fields. No DNS, registry or LinkedIn verification was performed.",
+  ].join("\n");
+}
+
 export default function AutonomousPage() {
   const [accounts, setAccounts] = useState<AutonomousAccount[]>(INITIAL_ACCOUNTS);
   const [selectedAccount, setSelectedAccount] = useState<AutonomousAccount | null>(INITIAL_ACCOUNTS[0]);
@@ -406,8 +430,10 @@ export default function AutonomousPage() {
   const [editFactValue, setEditFactValue] = useState<string>("");
   const [notificationBanner, setNotificationBanner] = useState<{ message: string; type: "success" | "info" | "warn" } | null>(null);
   // ChatGPT Brain States
-  const [brainProvider, setBrainProvider] = useState<string>("ChatGPT Brain");
-  const [isLiveChatGPT, setIsLiveChatGPT] = useState<boolean>(true);
+  const [brainProvider, setBrainProvider] = useState<string>("No AI pass run yet");
+  const [isLiveChatGPT, setIsLiveChatGPT] = useState<boolean>(false);
+  const [brainError, setBrainError] = useState<string | null>(null);
+  const [agentReport, setAgentReport] = useState<AgentReport | null>(null);
   const [isAiSortingOpen, setIsAiSortingOpen] = useState<boolean>(false);
   const [isAiSortingLoading, setIsAiSortingLoading] = useState<boolean>(false);
   const [aiSortResult, setAiSortResult] = useState<AISortResult | null>(null);
@@ -417,21 +443,29 @@ export default function AutonomousPage() {
   const [isAiEmailLoading, setIsAiEmailLoading] = useState<boolean>(false);
   const [emailTargetLead, setEmailTargetLead] = useState<any | null>(null);
   const [composedEmail, setComposedEmail] = useState<AIComposedEmail | null>(null);
-  const [emailAngle, setEmailAngle] = useState<string>("value_led");
+  const [emailAngle, setEmailAngle] = useState<string>("direct");
   const [copiedEmail, setCopiedEmail] = useState<boolean>(false);
 
   const [agentLogs, setAgentLogs] = useState<string[]>([
-    "[DISPATCH] Work queue leased 4 accounts with FOR UPDATE SKIP LOCKED",
-    "[SCOUT] Target target: 'Commercial Real Estate Development' in 'Lagos, Nigeria'",
-    "[AUTO-APPLY] dns.mx-record verified (0.95) -> updated apexprimerealty.ng primary email",
-    "[AUTO-APPLY] corporate.registry confirmed MD (0.90) -> Olumide Adeyemi written to record",
-    "[AUTO-APPLY] signature-block verified (0.82) -> direct phone +234 803 491 8293 written to record",
-    "[SUGGESTION QUEUED] web.cited-claim (0.65) -> Next.js + HubSpot tech stack queued for rep approval",
-    "[SUGGESTION QUEUED] search.cites-profile (0.54) -> ₦18.5M deal value queued for rep approval",
-    "[SUGGESTION QUEUED] handle.name-form (0.42) -> Personal WhatsApp line held back for rep verification",
+    "[STANDBY] Agent loop has not run yet. It audits leads already sourced by Apollo; it does not find new companies.",
   ]);
 
-  // Execute Real Agent Loop
+  const LOOP_BATCH_SIZE = 12;
+
+  const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  const finishFailedRun = (message: string) => {
+    setBrainError(message);
+    setIsLiveChatGPT(false);
+    setLoopRunning(false);
+    setLoopPhase("completed");
+    setLoopProgress(100);
+    setCurrentStepText("Agent pass stopped: no live ChatGPT result.");
+    setAgentLogs((prev) => [`[BRAIN FAILED] ${message}`, ...prev]);
+    setNotificationBanner({ message, type: "warn" });
+  };
+
+  // Execute Agent Loop: audits CRM records already sourced by Apollo.
   const runTargetAgentLoop = async (customNiche?: string, customCity?: string) => {
     const niche = customNiche || targetNiche;
     const city = customCity || targetCity;
@@ -440,438 +474,249 @@ export default function AutonomousPage() {
 
     setLoopRunning(true);
     setLoopPhase("scouting");
-    setLoopProgress(10);
-    setCurrentStepText(`Scouting target candidates for "${niche}" in "${city}"...`);
-
+    setLoopProgress(5);
+    setAgentReport(null);
+    setBrainError(null);
+    setCurrentStepText(`Reading stored CRM leads for "${niche}" in "${city}"...`);
     setAgentLogs((prev) => [
-      `[SCOUT] Target query initiated: "${niche}" in "${city}"`,
-      `[DISPATCH] Leased target batch (candidate entities)`,
+      `[SCOUT] Agent pass started: "${niche}" / "${city}". Sourcing is Apollo's job; this pass only audits records.`,
       ...prev,
     ]);
 
+    const stored = getStoredLeads();
+    const cityName = city.split(",")[0].trim().toLowerCase();
+    const nicheTerms = niche
+      .toLowerCase()
+      .split(/[&,/]| and /)
+      .map((term) => term.trim())
+      .filter((term) => term.length > 3);
+
+    const matchesTarget = (lead: Lead) => {
+      const location = (lead.location || "").toLowerCase();
+      const leadNiche = (lead.niche || "").toLowerCase();
+      const tags = (lead.tags || []).join(" ").toLowerCase();
+      return (
+        location.includes(cityName) ||
+        nicheTerms.some((term) => leadNiche.includes(term) || tags.includes(term))
+      );
+    };
+
+    const matched = stored.filter(matchesTarget);
+    const pool = matched.length > 0 ? matched : stored;
+
+    if (pool.length === 0) {
+      setLoopRunning(false);
+      setLoopPhase("completed");
+      setLoopProgress(100);
+      setCurrentStepText("No CRM records to qualify.");
+      setAgentLogs((prev) => [
+        "[BLOCKED] The CRM holds no leads. Run an Apollo search on the Prospecting page first.",
+        ...prev,
+      ]);
+      setNotificationBanner({
+        message:
+          "There are no leads to qualify yet. The agent only audits records — new leads come from Apollo on the Prospecting page.",
+        type: "warn",
+      });
+      return;
+    }
+
+    const batch = pool.slice(0, LOOP_BATCH_SIZE);
+    setAgentLogs((prev) => [
+      `[READ] ${stored.length} lead(s) in CRM · ${matched.length} matched the target · qualifying ${batch.length}.`,
+      ...prev,
+    ]);
+
+    setLoopPhase("researching");
+    setLoopProgress(20);
+    setCurrentStepText(`Sending ${batch.length} stored leads to ChatGPT for qualification and reporting...`);
+
+    let brainData: any;
     try {
       const brainRes = await fetch("/api/autonomous/brain", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targetNiche: niche, targetCity: city, batchSize: 2 }),
+        body: JSON.stringify({ leads: batch, targetNiche: niche, targetCity: city }),
       });
-      const brainData = await brainRes.json();
-      if (brainData?.success) {
-        setBrainProvider(brainData.provider || "ChatGPT Brain");
-        setIsLiveChatGPT(Boolean(brainData.isLiveChatGPT));
-        setAgentLogs((prev) => [
-          `[BRAIN] Connected to ${brainData.provider} (${brainData.isLiveChatGPT ? "Live ChatGPT API" : "Intelligent Engine"})`,
-          ...prev,
-        ]);
-      }
-    } catch {
-      // continue
+      brainData = await brainRes.json();
+    } catch (err: any) {
+      finishFailedRun(`Could not reach the qualification endpoint: ${err?.message}`);
+      return;
     }
-    const isFintech = niche.toLowerCase().includes("fintech") || niche.toLowerCase().includes("pay");
-    const isHVAC = niche.toLowerCase().includes("hvac") || niche.toLowerCase().includes("mechanical") || niche.toLowerCase().includes("cool");
-    const isLegal = niche.toLowerCase().includes("law") || niche.toLowerCase().includes("legal");
-    const isSaaS = niche.toLowerCase().includes("saas") || niche.toLowerCase().includes("software") || niche.toLowerCase().includes("cloud");
-    const cityName = city.split(",")[0].trim();
 
-    const candidates = [
-      {
-        name: isHVAC
-          ? `${cityName} Climate & Commercial Systems`
-          : isFintech
-          ? `${cityName} PayBridge Africa Technologies`
-          : isLegal
-          ? `${cityName} Sterling & Balogun Chambers`
-          : isSaaS
-          ? `CloudScale ${cityName} Systems`
-          : `${cityName} Premier ${niche.split("&")[0].trim()} Co`,
-        domain: isHVAC
-          ? `${cityName.toLowerCase().replace(/\s+/g, "")}climatesys.com`
-          : isFintech
-          ? `paybridge-${cityName.toLowerCase().replace(/\s+/g, "")}.io`
-          : isLegal
-          ? `sterlingbalogun-${cityName.toLowerCase().replace(/\s+/g, "")}.law`
-          : isSaaS
-          ? `cloudscale-${cityName.toLowerCase().replace(/\s+/g, "")}.io`
-          : `${cityName.toLowerCase().replace(/\s+/g, "")}holdings.com`,
-        decisionMaker: "Engr. Dapo Alabi",
-        title: "Managing Director & Chief Executive",
-        email: `d.alabi@${cityName.toLowerCase().replace(/\s+/g, "")}corp.com`,
-        phone: "+234 803 711 9024",
-        techStack: "Next.js, AWS Cloud, Stripe, Tailwind CSS",
-        dealValue: "₦22,000,000 ARR Retainer",
-        rawDealValue: 22000000,
-        directMobile: "+234 802 334 1190 (Personal WhatsApp)",
-      },
-      {
-        name: isHVAC
-          ? "Lone Star Thermal Solutions & Chillers"
-          : isFintech
-          ? "Kuda Transact Enterprise Infrastructure"
-          : isLegal
-          ? "Lexington Commercial Counsel LLP"
-          : isSaaS
-          ? "OmniFlow Automation Labs"
-          : `Apex ${niche.split("&")[0].trim()} Holdings`,
-        domain: isHVAC
-          ? "lonestarthermal.com"
-          : isFintech
-          ? "kudatransact.ng"
-          : isLegal
-          ? "lexingtoncounsel.com"
-          : isSaaS
-          ? "omniflowlabs.com"
-          : `apex-${cityName.toLowerCase().replace(/\s+/g, "")}.com`,
-        decisionMaker: "Zainab Mohammed-Bello",
-        title: "Chief Operating Officer & VP Partnerships",
-        email: "zainab.bello@transactholdings.com",
-        phone: "+234 818 903 4412",
-        techStack: "React, Node.js, PostgreSQL, Cloudflare Enterprise",
-        dealValue: "₦17,500,000 ARR Retainer",
-        rawDealValue: 17500000,
-        directMobile: "+234 809 110 5543 (Personal Line)",
-      },
-    ];
+    setBrainProvider(brainData?.provider || "Unknown provider");
+    setIsLiveChatGPT(Boolean(brainData?.isLiveChatGPT));
 
-    setTimeout(() => {
-      setLoopPhase("researching");
-      setLoopProgress(35);
-      const company1 = candidates[0];
-      setCurrentStepText(`Researching Company 1 of 2: "${company1.name}"... Verifying DNS MX and Corporate Registry.`);
+    if (!brainData?.success) {
+      finishFailedRun(brainData?.error || "Qualification failed.");
+      return;
+    }
 
-      const newAccId = `acc-${Date.now()}-1`;
-      const f1: FactItem = {
-        id: `f-${Date.now()}-1`,
-        accountId: newAccId,
-        companyName: company1.name,
-        field: "email",
-        fieldLabel: "Primary Corporate Email",
-        value: company1.email,
-        source: "dns.mx-record",
-        method: "dns_handshake",
-        kind: "primary",
-        confidence: 0.95,
-        scoreBand: "strong",
-        status: "auto_applied",
-        rationale: "Corporate mail exchanger (MX) and SPF handshake validated. Recipient confirmed deliverable.",
-        timestamp: "Just now",
-      };
-      const f2: FactItem = {
-        id: `f-${Date.now()}-2`,
-        accountId: newAccId,
-        companyName: company1.name,
-        field: "decisionMaker",
-        fieldLabel: "Decision Maker & Title",
-        value: `${company1.decisionMaker} (${company1.title})`,
-        source: "corporate.registry",
-        method: "corporate_registry",
-        kind: "primary",
-        confidence: 0.9,
-        scoreBand: "strong",
-        status: "auto_applied",
-        rationale: "Statutory business registration filing confirms officer status.",
-        timestamp: "Just now",
-      };
-      const f3: FactItem = {
-        id: `f-${Date.now()}-3`,
-        accountId: newAccId,
-        companyName: company1.name,
-        field: "phone",
-        fieldLabel: "Direct Corporate Phone",
-        value: company1.phone,
-        source: "crm.signature-block",
-        method: "signature_block",
-        kind: "primary",
-        confidence: 0.82,
-        scoreBand: "strong",
-        status: "auto_applied",
-        rationale: "Verified email signature block on inbound thread.",
-        timestamp: "Just now",
-      };
-      const f4: FactItem = {
-        id: `f-${Date.now()}-4`,
-        accountId: newAccId,
-        companyName: company1.name,
-        field: "techStack",
-        fieldLabel: "Observed Tech Stack",
-        value: company1.techStack,
-        source: "web.cited-claim",
-        method: "web_crawler",
-        kind: "supporting",
-        confidence: 0.65,
-        scoreBand: "weak",
-        status: "pending_approval",
-        rationale: "Client bundle script scan detected web frameworks. Held as suggestion for human review.",
-        timestamp: "Just now",
-      };
-      const f5: FactItem = {
-        id: `f-${Date.now()}-5`,
-        accountId: newAccId,
-        companyName: company1.name,
-        field: "dealValue",
-        fieldLabel: "Estimated Deal Potential",
-        value: company1.dealValue,
-        source: "search.cites-profile",
-        method: "search_snippet",
-        kind: "supporting",
-        confidence: 0.54,
-        scoreBand: "weak",
-        status: "pending_approval",
-        rationale: "Calculated from employee headcount and market tier. Held for rep approval.",
-        timestamp: "Just now",
-      };
+    const verdicts: LeadVerdict[] = Array.isArray(brainData.verdicts) ? brainData.verdicts : [];
+    const verdictByLead = new Map(verdicts.map((verdict) => [verdict.leadId, verdict]));
 
-      const newAccountObj: AutonomousAccount = {
-        id: newAccId,
-        name: company1.name,
-        domain: company1.domain,
-        niche: niche,
-        location: city,
-        dealValue: company1.dealValue,
-        rawDealValue: company1.rawDealValue,
+    setAgentLogs((prev) => [
+      `[BRAIN] ${brainData.provider} returned ${verdicts.length} verdict(s).`,
+      ...prev,
+    ]);
+
+    setLoopPhase("analyzing");
+
+    for (let index = 0; index < batch.length; index += 1) {
+      const lead = batch[index];
+      const verdict = verdictByLead.get(lead.id);
+
+      setLoopProgress(20 + Math.round(((index + 1) / batch.length) * 70));
+      setCurrentStepText(`Auditing ${lead.company} (${index + 1}/${batch.length})...`);
+
+      if (!verdict) {
+        setAgentLogs((prev) => [`[SKIPPED] No verdict came back for ${lead.company}.`, ...prev]);
+        continue;
+      }
+
+      const stamp = Date.now();
+      const accountId = `acc-${lead.id}-${stamp}`;
+      const domain = (lead.website || "")
+        .replace(/^https?:\/\//, "")
+        .replace(/^www\//, "")
+        .split("/")[0];
+      const statusLabel = verdict.status.replace("_", " ");
+
+      const account: AutonomousAccount = {
+        id: accountId,
+        name: lead.company,
+        domain: domain || "not recorded",
+        niche: lead.niche || niche,
+        location: lead.location || city,
+        dealValue: `${lead.currency || "NGN"} ${(lead.dealValue || 0).toLocaleString()}`,
+        rawDealValue: lead.dealValue || 0,
         stage: "new",
-        agentStatus: "enriched",
-        owner: "Cyril Charles",
-        lastAction: "Researched in agent loop: 3 strong facts auto-applied, 2 suggestions queued",
+        agentStatus: verdict.status === "qualified" ? "enriched" : "needs-review",
+        lastAction: `ChatGPT audit: ${statusLabel} (${verdict.qualificationScore}/100)`,
+        owner: lead.name || "Unassigned",
         facts: {
-          decisionMaker: company1.decisionMaker,
-          title: company1.title,
-          email: company1.email,
-          phone: company1.phone,
-          employees: "30-45 staff",
-          techStack: ["Pending Rep Approval"],
-          summary: `High-value prospective account in ${city} for ${niche}. Researched via autonomous agent loop.`,
+          decisionMaker: lead.name || "Not recorded",
+          title: lead.title || "Not recorded",
+          email: lead.email || "Not recorded",
+          phone: lead.phone || "Not recorded",
+          employees: "Not recorded",
+          techStack: [],
+          summary: lead.notes || "No notes on record.",
         },
         evidenceLedger: [
           {
-            id: `ev-${Date.now()}-1`,
-            source: "dns.mx-record",
-            fact: `Corporate mail server handshake confirmed for ${company1.email}`,
-            confidence: "verified",
-            confidenceScore: 0.95,
+            id: `ev-${stamp}-${lead.id}-source`,
+            source: (lead.notes || "").toUpperCase().includes("APOLLO")
+              ? "apollo.organizations-search"
+              : "crm.stored-record",
+            fact: "Record loaded from the CRM exactly as sourced. This pass did not write contact data.",
+            confidence: "observed",
+            confidenceScore: 1,
             status: "auto_applied",
             timestamp: "Just now",
           },
           {
-            id: `ev-${Date.now()}-2`,
-            source: "corporate.registry",
-            fact: `Official filing matches ${company1.decisionMaker} (${company1.title})`,
-            confidence: "verified",
-            confidenceScore: 0.9,
-            status: "auto_applied",
-            timestamp: "Just now",
-          },
-          {
-            id: `ev-${Date.now()}-3`,
-            source: "crm.signature-block",
-            fact: `Signature phone line verified as ${company1.phone}`,
-            confidence: "verified",
-            confidenceScore: 0.82,
-            status: "auto_applied",
+            id: `ev-${stamp}-${lead.id}-ai`,
+            source: "chatgpt.assessment",
+            fact: verdict.rationale || verdict.recommendedAction,
+            confidence: verdict.status === "qualified" ? "observed" : "weak",
+            confidenceScore: verdict.confidence,
+            status: verdict.status === "qualified" ? "auto_applied" : "pending_approval",
             timestamp: "Just now",
           },
         ],
-        agentNotes: ["Agent loop identified verified decision-maker.", "3 strong facts written directly to lead."],
-        nextRecheck: "In 7 days",
-        recheckReason: "Periodic enrichment refresh",
+        agentNotes: [verdict.recommendedAction, ...verdict.issues].filter(Boolean).slice(0, 6),
+        nextRecheck: verdict.status === "disqualified" ? "Not scheduled" : "In 7 days",
+        recheckReason:
+          verdict.status === "qualified"
+            ? "Qualified account, periodic refresh"
+            : "Rep decision required on flagged issues",
       };
 
-      // Also save into CRM storage so it seamlessly updates the whole website!
-      saveSingleLead({
-        id: `lead-sync-${Date.now()}-1`,
-        name: company1.decisionMaker,
-        title: company1.title,
-        company: company1.name,
-        email: company1.email,
-        phone: company1.phone,
-        website: `https://${company1.domain}`,
-        niche: niche,
-        location: city,
-        stage: "new",
-        dealValue: company1.rawDealValue,
-        currency: "NGN",
-        score: 95,
-        notes: `Auto-generated by Comp AI Agent Loop. Verified MX (${company1.email}) and official signature.`,
-        tags: [niche.split("&")[0].trim(), cityName],
-        createdAt: new Date().toISOString(),
-      });
+      const newFacts: FactItem[] = [
+        {
+          id: `f-${stamp}-${lead.id}-verdict`,
+          accountId,
+          companyName: lead.company,
+          field: "summary",
+          fieldLabel: "AI Qualification Verdict",
+          value: `${statusLabel} · ${verdict.qualificationScore}/100`,
+          source: "chatgpt.assessment",
+          method: "llm_audit",
+          kind: "supporting",
+          confidence: verdict.confidence,
+          scoreBand: verdict.confidence >= 0.8 ? "strong" : "weak",
+          status: verdict.status === "qualified" ? "auto_applied" : "pending_approval",
+          rationale: verdict.rationale,
+          timestamp: "Just now",
+        },
+        ...verdict.issues.map((issue, issueIndex) => ({
+          id: `f-${stamp}-${lead.id}-issue-${issueIndex}`,
+          accountId,
+          companyName: lead.company,
+          field: "summary" as const,
+          fieldLabel: `Flagged issue ${issueIndex + 1}`,
+          value: issue,
+          source: "chatgpt.assessment",
+          method: "llm_audit",
+          kind: "weak" as const,
+          confidence: verdict.confidence,
+          scoreBand: "weak" as const,
+          status: "pending_approval" as const,
+          rationale: "Raised by ChatGPT while auditing the supplied record only.",
+          timestamp: "Just now",
+        })),
+      ];
 
-      setAccounts((prev) => [newAccountObj, ...prev]);
-      setFacts((prev) => [f1, f2, f3, f4, f5, ...prev]);
+      setAccounts((prev) => [account, ...prev]);
+      setFacts((prev) => [...newFacts, ...prev]);
       setAgentLogs((prev) => [
-        `[SCOUT] Leased "${company1.name}" (${company1.domain})`,
-        `[AUTO-APPLY] dns.mx-record verified (0.95) -> written directly to record: ${company1.email}`,
-        `[AUTO-APPLY] corporate.registry verified (0.90) -> written directly to record: ${company1.decisionMaker}`,
-        `[AUTO-APPLY] crm.signature-block verified (0.82) -> written directly to record: ${company1.phone}`,
-        `[SUGGESTION QUEUED] web.cited-claim (0.65) -> held as suggestion: "${company1.techStack}"`,
-        `[SUGGESTION QUEUED] search.cites-profile (0.54) -> held as suggestion: "${company1.dealValue}"`,
+        `[AUDIT] ${lead.company} -> ${statusLabel.toUpperCase()} (${verdict.qualificationScore}/100, confidence ${verdict.confidence.toFixed(2)})`,
+        ...(verdict.issues.length > 0
+          ? verdict.issues.map((issue) => `[FLAG] ${lead.company}: ${issue}`)
+          : [`[CLEAR] ${lead.company}: no data issues detected in the stored fields.`]),
+        `[ACTION] ${verdict.recommendedAction}`,
         ...prev,
       ]);
 
-      // Step to company 2
-      setTimeout(() => {
-        setLoopProgress(70);
-        const company2 = candidates[1];
-        setCurrentStepText(`Researching Company 2 of 2: "${company2.name}"... Evaluating executive profiles & tech stack.`);
+      await wait(180);
+    }
 
-        const newAccId2 = `acc-${Date.now()}-2`;
-        const f6: FactItem = {
-          id: `f-${Date.now()}-6`,
-          accountId: newAccId2,
-          companyName: company2.name,
-          field: "email",
-          fieldLabel: "Primary Corporate Email",
-          value: company2.email,
-          source: "dns.mx-record",
-          method: "dns_handshake",
-          kind: "primary",
-          confidence: 0.95,
-          scoreBand: "strong",
-          status: "auto_applied",
-          rationale: "Corporate mail server validated with zero bounce risk.",
-          timestamp: "Just now",
-        };
-        const f7: FactItem = {
-          id: `f-${Date.now()}-7`,
-          accountId: newAccId2,
-          companyName: company2.name,
-          field: "decisionMaker",
-          fieldLabel: "Decision Maker & Title",
-          value: `${company2.decisionMaker} (${company2.title})`,
-          source: "linkedin.employer-and-name",
-          method: "linkedin_verified",
-          kind: "primary",
-          confidence: 0.88,
-          scoreBand: "strong",
-          status: "auto_applied",
-          rationale: "LinkedIn employer and title match confirmed.",
-          timestamp: "Just now",
-        };
-        const f8: FactItem = {
-          id: `f-${Date.now()}-8`,
-          accountId: newAccId2,
-          companyName: company2.name,
-          field: "techStack",
-          fieldLabel: "Production Tech Stack",
-          value: company2.techStack,
-          source: "web.cited-claim",
-          method: "web_crawler",
-          kind: "supporting",
-          confidence: 0.68,
-          scoreBand: "weak",
-          status: "pending_approval",
-          rationale: "Observed Cloudflare Enterprise and React headers on public endpoint.",
-          timestamp: "Just now",
-        };
-        const f9: FactItem = {
-          id: `f-${Date.now()}-9`,
-          accountId: newAccId2,
-          companyName: company2.name,
-          field: "directMobile",
-          fieldLabel: "Direct Personal Mobile",
-          value: company2.directMobile,
-          source: "handle.name-form",
-          method: "handle_inference",
-          kind: "weak",
-          confidence: 0.45,
-          scoreBand: "weak",
-          status: "pending_approval",
-          rationale: "Personal contact handle inferred from open index. Held back for rep verification.",
-          timestamp: "Just now",
-        };
+    const scored = stored.map((lead) => {
+      const verdict = verdictByLead.get(lead.id);
+      return verdict ? { ...lead, score: verdict.qualificationScore } : lead;
+    });
+    saveLeads(scored);
 
-        const newAccountObj2: AutonomousAccount = {
-          id: newAccId2,
-          name: company2.name,
-          domain: company2.domain,
-          niche: niche,
-          location: city,
-          dealValue: company2.dealValue,
-          rawDealValue: company2.rawDealValue,
-          stage: "new",
-          agentStatus: "enriched",
-          owner: "Cyril Charles",
-          lastAction: "Researched in agent loop: 2 strong facts auto-applied, 2 suggestions queued",
-          facts: {
-            decisionMaker: company2.decisionMaker,
-            title: company2.title,
-            email: company2.email,
-            phone: company2.phone,
-            employees: "40-60 staff",
-            techStack: ["Pending Rep Approval"],
-            summary: `Promising enterprise prospect in ${city}. Verified via Comp AI agent research loop.`,
-          },
-          evidenceLedger: [
-            {
-              id: `ev-${Date.now()}-4`,
-              source: "dns.mx-record",
-              fact: `Mail server handshake verified for ${company2.email}`,
-              confidence: "verified",
-              confidenceScore: 0.95,
-              status: "auto_applied",
-              timestamp: "Just now",
-            },
-            {
-              id: `ev-${Date.now()}-5`,
-              source: "linkedin.employer-and-name",
-              fact: `LinkedIn confirmed ${company2.decisionMaker} as ${company2.title}`,
-              confidence: "verified",
-              confidenceScore: 0.88,
-              status: "auto_applied",
-              timestamp: "Just now",
-            },
-          ],
-          agentNotes: ["Automated recheck scheduled in 7 days."],
-          nextRecheck: "In 7 days",
-          recheckReason: "Quarterly review",
-        };
+    const report: AgentReport | null = brainData.report || null;
+    setAgentReport(report);
 
-        saveSingleLead({
-          id: `lead-sync-${Date.now()}-2`,
-          name: company2.decisionMaker,
-          title: company2.title,
-          company: company2.name,
-          email: company2.email,
-          phone: company2.phone,
-          website: `https://${company2.domain}`,
-          niche: niche,
-          location: city,
-          stage: "new",
-          dealValue: company2.rawDealValue,
-          currency: "NGN",
-          score: 93,
-          notes: `Auto-generated by Comp AI Agent Loop. Verified LinkedIn identity and corporate MX.`,
-          tags: [niche.split("&")[0].trim(), cityName],
-          createdAt: new Date().toISOString(),
-        });
+    if (report) {
+      logActivity({
+        id: `act-${Date.now()}`,
+        type: "note_added",
+        title: `Qualification pass: ${report.reviewedCount} lead(s) audited`,
+        description: report.headline,
+        timestamp: new Date().toISOString(),
+      });
+    }
 
-        setAccounts((prev) => [newAccountObj2, ...prev]);
-        setFacts((prev) => [f6, f7, f8, f9, ...prev]);
-        setAgentLogs((prev) => [
-          `[SCOUT] Leased "${company2.name}" (${company2.domain})`,
-          `[AUTO-APPLY] dns.mx-record verified (0.95) -> written directly to record: ${company2.email}`,
-          `[AUTO-APPLY] linkedin.employer-and-name verified (0.88) -> written directly to record: ${company2.decisionMaker}`,
-          `[SUGGESTION QUEUED] web.cited-claim (0.68) -> held as suggestion: "${company2.techStack}"`,
-          `[SUGGESTION QUEUED] handle.name-form (0.45) -> personal phone held back for rep verification`,
-          ...prev,
-        ]);
-
-        // Complete Loop
-        setTimeout(() => {
-          setLoopProgress(100);
-          setLoopPhase("completed");
-          setLoopRunning(false);
-          setCurrentStepText(`Agent loop completed: Researched target candidates in "${city}".`);
-          setNotificationBanner({
-            message: `Agent loop complete: 2 new companies researched for ${niche}. 5 strong facts auto-applied to leads, 4 suggestions queued for your approval.`,
-            type: "success",
-          });
-          setAgentLogs((prev) => [
-            `[LEDGER_SWEEP] Settled active pass. High-confidence facts written to records. Weak facts enqueued for rep review.`,
-            ...prev,
-          ]);
-        }, 1200);
-      }, 1400);
-    }, 1200);
+    setLoopProgress(100);
+    setLoopPhase("completed");
+    setLoopRunning(false);
+    setCurrentStepText(
+      `Pass complete: ${verdicts.length} stored lead(s) audited for "${niche}" in "${city}".`
+    );
+    setAgentLogs((prev) => [
+      `[LEDGER_SWEEP] Pass settled. Scores written to ${verdicts.length} record(s); flagged issues queued for rep review.`,
+      ...prev,
+    ]);
+    setNotificationBanner({
+      message:
+        report?.executiveSummary ||
+        `Audited ${verdicts.length} leads. ${verdicts.filter((v) => v.status === "qualified").length} qualified.`,
+      type: "info",
+    });
   };
 
   // Suggestion Approval Handlers
@@ -1011,36 +856,54 @@ export default function AutonomousPage() {
     }
   };
 
+  const composeFactsFor = (accountOrLead: any) => {
+    const ledger = accountOrLead?.evidenceLedger;
+    if (Array.isArray(ledger) && ledger.length > 0) {
+      return ledger
+        .filter((entry: any) => entry?.status !== "rejected")
+        .map((entry: any) => ({
+          id: String(entry.id),
+          field: "evidence",
+          value: String(entry.fact ?? ""),
+          verified: entry.confidence === "verified",
+          source: String(entry.source ?? "agent ledger"),
+        }));
+    }
+    // No ledger means it is a plain CRM lead: only its firmographic defaults are usable.
+    return factsFromLead(accountOrLead).map((f) => ({
+      id: f.id,
+      field: f.field,
+      value: f.value,
+      verified: f.approvedByDefault,
+      source: f.source,
+    }));
+  };
+
   const handleOpenAiEmail = async (accountOrLead: any) => {
     setEmailTargetLead(accountOrLead);
     setIsAiEmailOpen(true);
     setIsAiEmailLoading(true);
+    setComposedEmail(null);
     try {
       const leadPayload = {
-        id: accountOrLead.id,
         name: accountOrLead.facts?.decisionMaker || accountOrLead.name || "Executive Officer",
-        title: accountOrLead.facts?.title || accountOrLead.title || "Managing Director",
+        title: accountOrLead.facts?.title || accountOrLead.title || "",
         company: accountOrLead.name || accountOrLead.company,
-        email: accountOrLead.facts?.email || accountOrLead.email,
-        phone: accountOrLead.facts?.phone || accountOrLead.phone,
         niche: accountOrLead.niche || targetNiche,
         location: accountOrLead.location || targetCity,
-        dealValue: accountOrLead.rawDealValue || accountOrLead.dealValue || 20000000,
-        facts: accountOrLead.evidenceLedger || [],
       };
       const res = await fetch("/api/outreach/ai-compose", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           lead: leadPayload,
-          angle: emailAngle,
-          facts: accountOrLead.evidenceLedger || [],
+          tone: emailAngle,
+          senderName: "Cyril Charles",
+          facts: composeFactsFor(accountOrLead),
         }),
       });
-      const data = await res.json();
-      if (data && data.subject && data.body) {
-        setComposedEmail(data);
-      }
+      const data: AIComposedEmail = await res.json();
+      setComposedEmail(data);
     } catch (err) {
       console.warn("AI email compose failed:", err);
     } finally {
@@ -1122,8 +985,8 @@ export default function AutonomousPage() {
           <div className="px-3 py-1.5 rounded-lg bg-[#121215] border border-emerald-500/40 flex items-center gap-2">
             <Bot className="w-3.5 h-3.5 text-emerald-400" />
             <span className="text-zinc-400">Brain:</span>
-            <span className="text-emerald-400 font-semibold flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className={`${isLiveChatGPT ? "text-emerald-400" : "text-amber-400"} font-semibold flex items-center gap-1.5`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${isLiveChatGPT ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`} />
               {brainProvider}
             </span>
           </div>
@@ -1207,7 +1070,7 @@ export default function AutonomousPage() {
               ) : (
                 <>
                   <Play className="w-3.5 h-3.5 fill-current" />
-                  <span>Run Agent Loop</span>
+                  <span>Qualify Stored Leads</span>
                 </>
               )}
             </button>
@@ -1259,6 +1122,119 @@ export default function AutonomousPage() {
         )}
       </div>
 
+      {/* AGENT QUALIFICATION REPORT */}
+      {(brainError || agentReport) && (
+        <div className="p-5 bg-[#09090b] border border-[#27272a] rounded-xl space-y-4">
+          {brainError && (
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-950/40 border border-amber-500/40">
+              <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="text-[11px] font-semibold text-amber-300 font-mono uppercase tracking-wider">
+                  No live ChatGPT result
+                </p>
+                <p className="text-[11px] text-amber-200/80 leading-relaxed whitespace-pre-wrap">{brainError}</p>
+              </div>
+            </div>
+          )}
+
+          {agentReport && (
+            <>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#18181b] pb-3">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-emerald-400" />
+                  <div className="space-y-0.5">
+                    <h2 className="text-xs font-semibold text-white font-mono uppercase tracking-wider">
+                      Qualification Report
+                    </h2>
+                    <p className="text-[11px] text-zinc-400">{agentReport.headline}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(reportAsText(agentReport));
+                    setNotificationBanner({ message: "Report copied to your clipboard.", type: "success" });
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-[#18181b] hover:bg-[#27272a] text-zinc-300 border border-[#27272a] text-[11px] transition-colors cursor-pointer"
+                >
+                  Copy report
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 font-mono text-center">
+                {[
+                  { label: "Audited", value: agentReport.reviewedCount, tone: "text-zinc-200" },
+                  { label: "Qualified", value: agentReport.qualifiedCount, tone: "text-emerald-400" },
+                  { label: "Need review", value: agentReport.needsReviewCount, tone: "text-amber-400" },
+                  { label: "Disqualified", value: agentReport.disqualifiedCount, tone: "text-red-400" },
+                  { label: "Avg score", value: agentReport.averageScore, tone: "text-zinc-200" },
+                ].map((stat) => (
+                  <div key={stat.label} className="p-2.5 bg-[#050505] border border-[#18181b] rounded-lg">
+                    <p className={`text-lg font-semibold ${stat.tone}`}>{stat.value}</p>
+                    <p className="text-[10px] text-zinc-500 uppercase tracking-wide">{stat.label}</p>
+                  </div>
+                ))}
+              </div>
+
+              <p className="text-[12px] text-zinc-300 leading-relaxed">{agentReport.executiveSummary}</p>
+
+              {agentReport.dataQualityFindings.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-[11px] font-semibold text-zinc-400 font-mono uppercase tracking-wider">
+                    Data quality findings
+                  </p>
+                  <ul className="space-y-1">
+                    {agentReport.dataQualityFindings.map((finding, index) => (
+                      <li key={index} className="flex items-start gap-2 text-[11px] text-zinc-400">
+                        <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                        <span>{finding}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {agentReport.topTargets.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-[11px] font-semibold text-zinc-400 font-mono uppercase tracking-wider">
+                    Top targets
+                  </p>
+                  <ul className="space-y-1">
+                    {agentReport.topTargets.map((target) => (
+                      <li key={target.leadId} className="flex items-start gap-2 text-[11px]">
+                        <Target className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                        <span className="text-zinc-300">
+                          <span className="font-semibold text-white">{target.company}</span> — {target.why}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {agentReport.nextActions.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-[11px] font-semibold text-zinc-400 font-mono uppercase tracking-wider">
+                    Next actions
+                  </p>
+                  <ol className="space-y-1 list-decimal list-inside">
+                    {agentReport.nextActions.map((action, index) => (
+                      <li key={index} className="text-[11px] text-zinc-400">
+                        {action}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              )}
+
+              <p className="text-[10px] text-zinc-600 font-mono border-t border-[#18181b] pt-3">
+                Assessment only. ChatGPT judged the fields stored on each record; no DNS lookup, registry check or
+                LinkedIn verification was performed by this pass.
+              </p>
+            </>
+          )}
+        </div>
+      )}
+
       {/* SUGGESTIONS AWAITING REP APPROVAL */}
       <div className="p-5 bg-[#09090b] border border-[#27272a] rounded-xl space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#18181b] pb-3">
@@ -1292,7 +1268,7 @@ export default function AutonomousPage() {
             <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto opacity-70" />
             <p className="text-xs text-white font-medium">All suggestions settled!</p>
             <p className="text-[11px] text-zinc-500 font-mono">
-              Run the Target Agent Loop above to research new companies and extract fresh suggestions.
+              Run the agent loop above to audit the leads already in your CRM. New companies come from Apollo on the Prospecting page.
             </p>
           </div>
         ) : (
@@ -1805,7 +1781,7 @@ export default function AutonomousPage() {
                   <div className="flex items-center gap-2">
                     <h3 className="text-sm font-bold text-white">ChatGPT Lead Sorting & Qualification</h3>
                     <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-950/60 text-emerald-400 border border-emerald-500/30">
-                      {aiSortResult?.provider || "ChatGPT Brain"}
+                      {aiSortResult?.provider || "No live ChatGPT result"}
                     </span>
                   </div>
                   <p className="text-xs text-zinc-400 font-mono mt-0.5">
@@ -1949,7 +1925,7 @@ export default function AutonomousPage() {
                     ChatGPT Cold Email Generator
                   </h3>
                   <p className="text-xs text-zinc-400 font-mono mt-0.5">
-                    Target: {emailTargetLead?.name || emailTargetLead?.company} • Verified Fact-Grounded Outreach
+                    Target: {emailTargetLead?.name || emailTargetLead?.company} • Writes only from the facts on this record
                   </p>
                 </div>
               </div>
@@ -1962,17 +1938,17 @@ export default function AutonomousPage() {
             </div>
 
             <div className="p-5 flex-1 overflow-y-auto space-y-4 font-sans text-xs">
-              {/* Strategic Angle Selector */}
+              {/* Tone Selector */}
               <div className="space-y-1.5">
                 <label className="text-[10px] font-mono uppercase text-zinc-400 font-semibold">
-                  Outbound Copywriting Strategy
+                  Tone
                 </label>
                 <div className="flex flex-wrap gap-2">
                   {[
-                    { id: "value_led", label: "Value-Led Pitch" },
-                    { id: "pain_point", label: "Pain-Point Agitation" },
-                    { id: "quick_question", label: "Quick Soft Question" },
+                    { id: "direct", label: "Direct" },
+                    { id: "consultative", label: "Consultative" },
                     { id: "peer_to_peer", label: "Executive Peer-to-Peer" },
+                    { id: "short_question", label: "Short Question" },
                   ].map((a) => (
                     <button
                       key={a.id}
@@ -1999,6 +1975,9 @@ export default function AutonomousPage() {
                 </div>
               ) : composedEmail ? (
                 <>
+                  <ComposeAudit email={composedEmail} />
+                  {composedEmail.success && (
+                    <>
                   {/* Subject Line with swap options */}
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-mono uppercase text-zinc-400 font-semibold">
@@ -2027,11 +2006,13 @@ export default function AutonomousPage() {
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
                       <label className="text-[10px] font-mono uppercase text-zinc-400 font-semibold">
-                        Personalized Body
+                        Grounded Body
                       </label>
-                      <span className="text-[10px] font-mono text-emerald-400">
-                        {composedEmail.estimatedReadTimeSec}s read • {Math.round(composedEmail.confidenceScore * 100)}% Match
-                      </span>
+                      {composedEmail.estimatedReadTimeSec > 0 && (
+                        <span className="text-[10px] font-mono text-emerald-400">
+                          ~{composedEmail.estimatedReadTimeSec}s read
+                        </span>
+                      )}
                     </div>
                     <textarea
                       rows={8}
@@ -2049,7 +2030,7 @@ export default function AutonomousPage() {
                         <span className="text-zinc-500">{composedEmail.followUpSubject}</span>
                       </div>
                       <p className="text-zinc-300 text-[11px] leading-relaxed whitespace-pre-line">
-                        {composedEmail.followUpBody}
+                        {stripCitations(composedEmail.followUpBody)}
                       </p>
                     </div>
                   )}
@@ -2058,7 +2039,7 @@ export default function AutonomousPage() {
                   <div className="pt-2 flex items-center justify-between gap-2">
                     <button
                       onClick={() => {
-                        const full = `Subject: ${composedEmail.subject}\n\n${composedEmail.body}\n\n---\nFollow-Up (3 Days Later):\n${composedEmail.followUpBody}`;
+                        const full = `Subject: ${composedEmail.subject}\n\n${stripCitations(composedEmail.body)}\n\n---\nFollow-Up (3 Days Later):\n${stripCitations(composedEmail.followUpBody)}`;
                         navigator.clipboard.writeText(full);
                         setCopiedEmail(true);
                         setTimeout(() => setCopiedEmail(false), 2000);
@@ -2075,8 +2056,15 @@ export default function AutonomousPage() {
                       Done
                     </button>
                   </div>
+                    </>
+                  )}
                 </>
-              ) : null}
+              ) : (
+                <p className="py-8 text-center text-zinc-500 font-mono text-xs">
+                  No draft yet. The writer only produces copy when ChatGPT is connected and at least one
+                  verified fact exists on the record.
+                </p>
+              )}
             </div>
           </div>
         </div>

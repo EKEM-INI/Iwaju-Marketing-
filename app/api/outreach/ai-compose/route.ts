@@ -1,149 +1,206 @@
 import { NextResponse } from "next/server";
+import { getChatGptKey, getChatGptModel, requestChatGptJson, PRIMARY_KEY_NAME } from "@/lib/chatgpt";
+import { looksLikePhoneValue, isRoleAddress, isFreeMailDomain, emailDomain } from "@/lib/address-class";
+
+export const runtime = "nodejs";
+
+interface IncomingFact {
+  id?: string;
+  field?: string;
+  value?: string;
+  verified?: boolean;
+  source?: string;
+}
+
+interface ApprovedFact {
+  id: string;
+  field: string;
+  value: string;
+  source: string;
+}
+
+// Personal and unverified channels must be opted into explicitly, never used silently.
+const SENSITIVE_FIELDS = new Set(["directMobile", "personalMobile", "phone", "whatsapp", "address"]);
+
+const TONES = ["direct", "consultative", "peer_to_peer", "short_question"] as const;
 
 export async function GET() {
-  const apiKey =
-    process.env.CHATGPT_API ||
-    process.env.OPENAI_API_KEY ||
-    process.env.CHATGPT_API_KEY;
-
   return NextResponse.json({
     status: "ok",
-    hasApiKey: Boolean(apiKey && apiKey.trim().length > 0),
-    engine: "ChatGPT Outreach Email Composer Brain",
-    envKey: "CHATGPT_API",
+    hasApiKey: Boolean(getChatGptKey()),
+    engine: "Fact-Grounded Outreach Copilot",
+    envKey: PRIMARY_KEY_NAME,
+    model: getChatGptModel(),
+    grounding: "cites only the approved facts it is given; refuses sensitive or unverified ones",
   });
 }
 
 export async function POST(req: Request) {
+  let body: any;
   try {
-    const reqData = await req.json();
-    const {
-      lead = {},
-      angle = "value_led", // "value_led" | "pain_point" | "quick_question" | "peer_to_peer" | "case_study"
-      senderName = "Cyril Charles",
-      senderCompany = "Iwaju Marketing",
-      senderTitle = "Managing Partner",
-      customDirective = "",
-      facts = [],
-    } = reqData;
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ success: false, status: "bad_request", error: "Body must be JSON." }, { status: 400 });
+  }
 
-    const apiKey =
-      process.env.CHATGPT_API ||
-      process.env.OPENAI_API_KEY ||
-      process.env.CHATGPT_API_KEY;
+  const lead = body?.lead || {};
+  const tone = TONES.includes(body?.tone) ? body.tone : "direct";
+  const senderName = String(body?.senderName || "").trim();
+  const senderCompany = String(body?.senderCompany || "Iwaju Marketing").trim();
+  const customDirective = String(body?.customDirective || "").trim();
+  const incoming: IncomingFact[] = Array.isArray(body?.facts) ? body.facts : [];
 
-    if (apiKey && apiKey.trim().length > 0 && lead.company) {
-      try {
-        const systemPrompt = `You are the Elite Cold Email Copywriter Brain of Iwaju Marketing OS.
-You compose hyper-personalized, concise, high-converting B2B cold emails to C-level executives and business owners.
+  const approvedFacts: ApprovedFact[] = [];
+  const refusedFacts: { id: string; field: string; reason: string }[] = [];
 
-Principles:
-1. Under 110 words for the main body. No fluff, no "I hope this email finds you well", no robotic openings.
-2. Hook: Reference specific researched evidence (e.g. verified corporate filings, tech stack, company niche, location).
-3. Value Proposition: Quantifiable impact (e.g., pipeline acceleration, deal retention, CAC reduction).
-4. Low-friction Call To Action: E.g., "Open to a 5-minute call Thursday?" or "Worth a brief chat this week?"
-5. Tone: Respectful, razor-sharp, peer-to-peer.
-6. Return JSON only.`;
+  incoming.forEach((fact, index) => {
+    const id = String(fact?.id || `fact-${index}`);
+    const field = String(fact?.field || "unknown");
+    const value = String(fact?.value || "").trim();
 
-        const userPrompt = `Compose cold email sequence for:
-Recipient: ${lead.name || "Executive"} (${lead.title || "Managing Director"})
-Company: ${lead.company}
-Niche: ${lead.niche || "Enterprise"}
-Location: ${lead.location || "Nigeria"}
-Deal Value Target: ${lead.dealValue ? `₦${Number(lead.dealValue).toLocaleString()}` : "Enterprise Retainer"}
-Angle: ${angle}
-Sender: ${senderName}, ${senderTitle} at ${senderCompany}
-Verified Facts & Signals: ${JSON.stringify(facts.length > 0 ? facts : lead.facts || [])}
-Custom Directive: ${customDirective || "Keep tone direct, professional, and concise."}
+    if (!value) {
+      refusedFacts.push({ id, field, reason: "No value on the record to cite." });
+      return;
+    }
+    if (fact?.verified !== true) {
+      refusedFacts.push({ id, field, reason: "Marked unverified. Tick it as confirmed before it can be used." });
+      return;
+    }
+    if (SENSITIVE_FIELDS.has(field)) {
+      refusedFacts.push({
+        id,
+        field,
+        reason: "Personal contact channel. Excluded by default — outreach here needs a consent basis, not just a number.",
+      });
+      return;
+    }
+    // A field name is not a guarantee: free text often carries a number inside it.
+    if (looksLikePhoneValue(value)) {
+      refusedFacts.push({ id, field, reason: "The value is a phone number, so it stays out of written copy." });
+      return;
+    }
+    if (field === "email" && (isRoleAddress(value) || isFreeMailDomain(emailDomain(value)))) {
+      refusedFacts.push({
+        id,
+        field,
+        reason: "Shared mailbox or consumer provider: it identifies no person and is not a corporate channel.",
+      });
+      return;
+    }
+    approvedFacts.push({ id, field, value, source: String(fact?.source || "rep-confirmed") });
+  });
 
-Required JSON format:
+  const baseResponse = {
+    tone,
+    approvedFacts,
+    refusedFacts,
+    senderName,
+    senderCompany,
+  };
+
+  if (approvedFacts.length === 0) {
+    return NextResponse.json({
+      success: false,
+      status: "no_approved_facts",
+      error: "Nothing to write from. Confirm at least one verified, non-personal fact first.",
+      ...baseResponse,
+    });
+  }
+
+  if (!getChatGptKey()) {
+    return NextResponse.json({
+      success: false,
+      status: "no_key",
+      error: `No live email was written: ${PRIMARY_KEY_NAME} is not set in Vercel Environment Variables. No static template is substituted, because template copy would claim things no approved fact supports.`,
+      ...baseResponse,
+    });
+  }
+
+  const systemPrompt = `You are the Fact-Grounded Cold Outreach Writer for ${senderCompany}.
+
+You may ONLY state facts contained in the APPROVED FACTS list below. Every specific claim in the email must be traceable to one of those facts.
+
+Hard rules:
+1. Never invent client results, revenue figures, pipeline numbers, timeframes, case studies, benchmarks, awards or named third parties. If it is not in the approved facts, it does not exist.
+2. Never imply the recipient has a problem you have not been told about. You may describe a common challenge in general terms, but not as a claim about this company.
+3. Identify the sender by name and company in the sign-off.
+4. Include a plain opt-out line so the recipient can ask not to be contacted again.
+5. Keep the body under 110 words. No filler greetings such as "I hope this email finds you well".
+6. Do not use any REFUSED FACT, especially personal phone numbers or inferred mobile lines.
+7. For every factual claim about the recipient, add the fact id in square brackets immediately after it, e.g. "your work across fintech in Lagos [f2]".
+8. Return JSON only.`;
+
+  const userPrompt = `Write a ${tone} cold email.
+
+Recipient: ${lead.name || "(no person named)"}${lead.title ? `, ${lead.title}` : ""}
+Company: ${lead.company || "(unknown)"}
+Niche on record: ${lead.niche || "(unrecorded)"}
+Location on record: ${lead.location || "(unrecorded)"}
+
+APPROVED FACTS (the only things you may state):
+${approvedFacts.map((f) => `[${f.id}] ${f.field}: ${f.value} (source: ${f.source})`).join("\n")}
+
+REFUSED — DO NOT USE:
+${refusedFacts.length > 0 ? refusedFacts.map((f) => `- ${f.field}: ${f.reason}`).join("\n") : "- none"}
+
+Sender: ${senderName || "(rep name not set)"} at ${senderCompany}
+Rep directive: ${customDirective || "none"}
+
+Return JSON:
 {
-  "subject": "Primary attention-grabbing subject line",
-  "altSubjects": ["Alternative A/B Subject 1", "Alternative A/B Subject 2"],
-  "body": "The email text with clean paragraph breaks",
-  "followUpSubject": "Re: subject line",
-  "followUpBody": "Short 3-sentence follow-up sequence for 3 days later",
-  "hookFactUsed": "The specific fact or evidence item referenced in the opening",
-  "estimatedReadTimeSec": 25,
-  "confidenceScore": 0.94
+  "subject": "specific, no clickbait",
+  "altSubjects": ["A/B option 1", "A/B option 2"],
+  "body": "the email with [factId] markers retained after recipient-specific claims",
+  "followUpSubject": "Re: ...",
+  "followUpBody": "3 sentences maximum, still grounded",
+  "citedFactIds": ["f1", "f2"],
+  "estimatedReadTimeSec": 25
 }`;
 
-        const openAiRes = await fetch("https://api.openai.com/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${apiKey.trim()}`,
-          },
-          body: JSON.stringify({
-            model: "gpt-4o-mini",
-            messages: [
-              { role: "system", content: systemPrompt },
-              { role: "user", content: userPrompt },
-            ],
-            response_format: { type: "json_object" },
-            temperature: 0.4,
-          }),
-        });
+  const result = await requestChatGptJson<any>(systemPrompt, userPrompt, 0.4);
 
-        if (openAiRes.ok) {
-          const aiJson = await openAiRes.json();
-          const content = aiJson?.choices?.[0]?.message?.content;
-          if (content) {
-            const parsed = JSON.parse(content);
-            if (parsed.subject && parsed.body) {
-              return NextResponse.json({
-                success: true,
-                provider: "ChatGPT (GPT-4o-mini)",
-                isLiveChatGPT: true,
-                ...parsed,
-              });
-            }
-          }
-        }
-      } catch (e: any) {
-        console.warn("ChatGPT email compose error, using heuristic fallback:", e?.message);
-      }
-    }
-
-    // Heuristic Fallback
-    const recipientName = lead.name ? lead.name.split(" ")[0] : "there";
-    const companyName = lead.company || "your firm";
-    const nicheName = lead.niche || "your market";
-    const cityName = lead.location ? lead.location.split(",")[0].trim() : "Nigeria";
-
-    let subject = `${companyName} outbound deal velocity in ${cityName}`;
-    let emailBody = `Hi ${recipientName},\n\nI noticed ${companyName}'s rapid presence in ${nicheName} across ${cityName}.\n\nMost firms in your tier face high customer acquisition friction when scaling retainers past ₦20M+. We built an autonomous outbound engine that delivers qualified enterprise meetings directly into your calendar with zero manual SDR overhead.\n\nWould you be open to a brief 6-minute intro call this Thursday at 2 PM to review the benchmark?`;
-
-    if (angle === "pain_point") {
-      subject = `Quick observation regarding ${companyName}'s outbound pipeline`;
-      emailBody = `Hi ${recipientName},\n\nScaling commercial retainers in ${nicheName} usually comes down to one bottleneck: deal discovery takes too long, and manual email prospecting burns rep hours.\n\nWe deployed an automated agent fleet for companies in ${cityName} that verifies executive decision makers and secures high-intent meetings.\n\nWorth exploring if this fits ${companyName}'s targets for next month?`;
-    } else if (angle === "quick_question") {
-      subject = `Quick question for ${lead.name || companyName}`;
-      emailBody = `Hi ${recipientName},\n\nAre you currently looking to expand ${companyName}'s corporate client acquisition in ${cityName} over the next two quarters?\n\nIf so, I have a quick 1-page playbook showing how peer firms in ${nicheName} automated their outbound pipeline.\n\nMind if I send the link over?`;
-    }
-
+  if (!result.ok) {
     return NextResponse.json({
-      success: true,
-      provider: "Built-in Heuristic Brain",
-      isLiveChatGPT: false,
-      notice:
-        "Using built-in email copywriting templates. Set CHATGPT_API in Vercel to enable live ChatGPT autonomous email composing.",
-      subject,
-      altSubjects: [
-        `Idea for ${companyName} + ${nicheName}`,
-        `${recipientName} — quick question on ${companyName}`,
-      ],
-      body: emailBody,
-      followUpSubject: `Re: ${subject}`,
-      followUpBody: `Hi ${recipientName},\n\nFollowing up briefly on my earlier note regarding ${companyName}'s enterprise pipeline in ${cityName}.\n\nDo you have 5 minutes next Tuesday for a quick walkthrough?`,
-      hookFactUsed: `Verified corporate operations in ${cityName} within ${nicheName}`,
-      estimatedReadTimeSec: 25,
-      confidenceScore: 0.9,
+      success: false,
+      status: result.status,
+      error: result.message,
+      ...baseResponse,
     });
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err.message || "Failed to compose email." },
-      { status: 500 }
-    );
   }
+
+  const data = result.data || {};
+  const approvedIds = new Set(approvedFacts.map((f) => f.id));
+  const cited: string[] = Array.isArray(data.citedFactIds) ? data.citedFactIds.map(String) : [];
+  const inventedCitations = cited.filter((id) => !approvedIds.has(id));
+
+  const bodyText = String(data.body || "");
+  const lower = bodyText.toLowerCase();
+  const compliance = {
+    senderIdentified: senderName.length === 0 || lower.includes(senderName.toLowerCase()),
+    optOutPresent: lower.includes("opt out") || lower.includes("unsubscribe") || lower.includes("do not contact"),
+    onlyApprovedFactsCited: cited.length > 0 && inventedCitations.length === 0,
+    noBracketedClaimsMissing: bodyText.length > 0,
+    inventedNumbersDetected: /₦\s?\d|\$\s?\d|\d{2,}\s?(m|million|bn|billion)\b/i.test(bodyText)
+      ? !approvedFacts.some((f) => /₦|\$|\d/.test(f.value))
+      : false,
+  };
+
+  return NextResponse.json({
+    success: true,
+    status: "live",
+    provider: `ChatGPT (${result.model})`,
+    isLiveChatGPT: true,
+    subject: data.subject || "",
+    altSubjects: Array.isArray(data.altSubjects) ? data.altSubjects : [],
+    body: bodyText,
+    followUpSubject: data.followUpSubject || "",
+    followUpBody: data.followUpBody || "",
+    citedFacts: approvedFacts.filter((f) => cited.includes(f.id)),
+    inventedCitations,
+    estimatedReadTimeSec: Number(data.estimatedReadTimeSec) || 0,
+    compliance,
+    compliancePassed:
+      compliance.optOutPresent && compliance.onlyApprovedFactsCited && !compliance.inventedNumbersDetected,
+    ...baseResponse,
+  });
 }
