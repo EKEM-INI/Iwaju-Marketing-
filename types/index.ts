@@ -96,7 +96,7 @@ export interface AutonomousAccount {
   dealValue: string;
   rawDealValue: number;
   stage: "new" | "discovery" | "demo" | "proposal" | "won";
-  agentStatus: "active" | "enriched" | "recheck-scheduled" | "needs-review";
+  agentStatus: "active" | "enriched" | "recheck-scheduled" | "needs-review" | "not-audited";
   lastAction: string;
   owner: string;
   facts: {
@@ -406,4 +406,113 @@ export interface ConsentRecord {
   source: string;
   /** Personal data is not kept indefinitely; this is the review date, not a silent delete. */
   retainUntil: string | null;
+}
+
+/* ------------------------------------------------------------------ *
+ * Campaigns
+ * ------------------------------------------------------------------ */
+
+export type CampaignStatus = "draft" | "active" | "paused" | "finished" | "archived";
+
+export type CampaignChannel = "email" | "phone" | "whatsapp" | "linkedin" | "mixed";
+
+export type CampaignStepKind = "email" | "call" | "whatsapp" | "linkedin" | "review";
+
+/**
+ * Only outcomes a rep can actually observe without an inbox connection.
+ * There is deliberately no "opened" or "clicked" — nothing here can see that.
+ */
+export type TouchOutcome =
+  | "prepared"
+  | "handed_off"
+  | "replied"
+  | "no_answer"
+  | "declined"
+  | "unsubscribed"
+  | "blocked";
+
+export interface CampaignStep {
+  id: string;
+  order: number;
+  kind: CampaignStepKind;
+  label: string;
+  intent: string;
+  /** Days to wait after the previous touch before this one is due. */
+  waitDays: number;
+  rationale?: string;
+  source: "rules" | "chatgpt";
+}
+
+export interface CampaignTouch {
+  id: string;
+  campaignId: string;
+  leadId: string;
+  stepId: string;
+  stepOrder: number;
+  kind: CampaignStepKind;
+  outcome: TouchOutcome;
+  at: string;
+  note?: string;
+}
+
+export interface Campaign {
+  id: string;
+  name: string;
+  purpose: string;
+  channel: CampaignChannel;
+  status: CampaignStatus;
+  createdAt: string;
+  updatedAt: string;
+  /** When step 1 becomes due for a contact that has not been touched yet. */
+  startAt: string;
+  steps: CampaignStep[];
+  /** Contacts live in the shared lead store; a campaign only holds references. */
+  leadIds: string[];
+  targetValue?: number;
+  currency?: string;
+  notes?: string;
+}
+
+export type ContactCampaignState =
+  | "not_started"
+  | "due_now"
+  | "overdue"
+  | "waiting"
+  | "awaiting_reply"
+  | "finished"
+  | "stopped";
+
+export interface CampaignProgress {
+  leadId: string;
+  company: string;
+  name: string;
+  stage: PipelineStage;
+  state: ContactCampaignState;
+  nextStepId: string | null;
+  nextStepLabel: string;
+  nextDueAt: string | null;
+  overdueDays: number;
+  touchCount: number;
+  lastTouchAt: string | null;
+  lastOutcome: TouchOutcome | null;
+  terminal: boolean;
+}
+
+export interface CampaignStats {
+  contacts: number;
+  touched: number;
+  untouched: number;
+  dueNow: number;
+  overdue: number;
+  replied: number;
+  declined: number;
+  unsubscribed: number;
+  blocked: number;
+  /** Every ratio is recorded-touch based; `measuredFrom` says so out loud. */
+  replyRate: number | null;
+  stepProgress: { stepId: string; label: string; done: number; pending: number }[];
+  byStage: Record<PipelineStage, number>;
+  valueByCurrency: { currency: string; total: number; count: number }[];
+  measuredFrom: string;
+  notMeasured: string[];
 }

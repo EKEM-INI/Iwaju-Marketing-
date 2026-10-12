@@ -8,6 +8,7 @@ import {
   Radar,
   Kanban,
   Send,
+  Megaphone,
   RotateCcw,
   Cpu,
 } from "lucide-react";
@@ -21,6 +22,7 @@ export const NAV_ITEMS = [
   { name: "Lead Prospecting", href: "/prospecting", icon: Radar },
   { name: "Pipeline CRM", href: "/pipeline", icon: Kanban },
   { name: "Outreach Engine", href: "/outreach", icon: Send },
+  { name: "Campaigns", href: "/campaigns", icon: Megaphone },
 ];
 
 interface SidebarProps {

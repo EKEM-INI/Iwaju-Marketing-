@@ -29,365 +29,52 @@ import {
 import { getStoredLeads, logActivity, saveLeads } from "@/lib/storage";
 import { factsFromLead, stripCitations } from "@/lib/outreach-facts";
 import { ComposeAudit } from "@/components/outreach/ComposeAudit";
-import { Lead, FactItem, AutonomousAccount, AISortResult, AIComposedEmail, EvaluatedLead, LeadVerdict, AgentReport } from "@/types";
+import { Lead, FactItem, AutonomousAccount, AISortResult, AIComposedEmail, EvaluatedLead, LeadVerdict, AgentReport, PipelineStage } from "@/types";
 
-const INITIAL_FACTS: FactItem[] = [
-  // Apex Prime Realty
-  {
-    id: "fact-1",
-    accountId: "comp-1",
-    companyName: "Apex Prime Realty & Landholdings",
-    field: "email",
-    fieldLabel: "Primary Corporate Email",
-    value: "o.adeyemi@apexprimerealty.ng",
-    source: "dns.mx-record",
-    method: "dns_handshake",
-    kind: "primary",
-    confidence: 0.95,
-    scoreBand: "strong",
-    status: "auto_applied",
-    rationale: "Corporate MX validated via Google Workspace (ASPMX.L.GOOGLE.COM). Handshake confirmed mailbox exists.",
-    timestamp: "12m ago",
-  },
-  {
-    id: "fact-2",
-    accountId: "comp-1",
-    companyName: "Apex Prime Realty & Landholdings",
-    field: "decisionMaker",
-    fieldLabel: "Decision Maker & Title",
-    value: "Olumide Adeyemi (Managing Director)",
-    source: "corporate.registry",
-    method: "corporate_registry",
-    kind: "primary",
-    confidence: 0.9,
-    scoreBand: "strong",
-    status: "auto_applied",
-    rationale: "CAC statutory filing confirms executive directorship with shareholding authority.",
-    timestamp: "10m ago",
-  },
-  {
-    id: "fact-3",
-    accountId: "comp-1",
-    companyName: "Apex Prime Realty & Landholdings",
-    field: "phone",
-    fieldLabel: "Direct Corporate Phone",
-    value: "+234 803 491 8293",
-    source: "crm.signature-block",
-    method: "signature_block",
-    kind: "primary",
-    confidence: 0.82,
-    scoreBand: "strong",
-    status: "auto_applied",
-    rationale: "Managing Director official email signature block verified on inbound correspondence.",
-    timestamp: "8m ago",
-  },
-  {
-    id: "fact-4",
-    accountId: "comp-1",
-    companyName: "Apex Prime Realty & Landholdings",
-    field: "techStack",
-    fieldLabel: "Production Tech Stack",
-    value: "Next.js, Tailwind, Microsoft 365, HubSpot",
-    source: "web.cited-claim",
-    method: "web_crawler",
-    kind: "supporting",
-    confidence: 0.65,
-    scoreBand: "weak",
-    status: "pending_approval",
-    rationale: "Client bundle script inspection detected HubSpot and Next.js trackers. Held as suggestion for rep confirmation.",
-    timestamp: "5m ago",
-  },
-  {
-    id: "fact-5",
-    accountId: "comp-1",
-    companyName: "Apex Prime Realty & Landholdings",
-    field: "dealValue",
-    fieldLabel: "Estimated Deal Potential",
-    value: "₦18,500,000 ARR Retainer",
-    source: "search.cites-profile",
-    method: "search_snippet",
-    kind: "supporting",
-    confidence: 0.54,
-    scoreBand: "weak",
-    status: "pending_approval",
-    rationale: "Estimated from land development portfolio size (₦4.2B Series-A capitalization). Held for human review.",
-    timestamp: "4m ago",
-  },
-  {
-    id: "fact-6",
-    accountId: "comp-1",
-    companyName: "Apex Prime Realty & Landholdings",
-    field: "directMobile",
-    fieldLabel: "Direct Personal Mobile",
-    value: "+234 802 884 9102 (Personal WhatsApp)",
-    source: "handle.name-form",
-    method: "handle_inference",
-    kind: "weak",
-    confidence: 0.42,
-    scoreBand: "weak",
-    status: "pending_approval",
-    rationale: "Extracted from regional developer directory forum. Strict evidence rule holds back until approved.",
-    timestamp: "2m ago",
-  },
+const ACCOUNT_STAGE_FOR_PIPELINE: Record<PipelineStage, AutonomousAccount["stage"]> = {
+  new: "new",
+  contacted: "discovery",
+  meeting: "demo",
+  closed: "won",
+};
 
-  // Vanguard & Balogun
-  {
-    id: "fact-7",
-    accountId: "comp-2",
-    companyName: "Vanguard & Balogun Commercial Chambers",
-    field: "email",
-    fieldLabel: "Corporate Legal Email",
-    value: "folake.b@vanguardlegal.ng",
-    source: "dns.mx-record",
-    method: "dns_handshake",
-    kind: "primary",
-    confidence: 0.95,
-    scoreBand: "strong",
-    status: "auto_applied",
-    rationale: "Corporate mail server validated on vanguardlegal.ng with zero bounce probability.",
-    timestamp: "24m ago",
-  },
-  {
-    id: "fact-8",
-    accountId: "comp-2",
-    companyName: "Vanguard & Balogun Commercial Chambers",
-    field: "decisionMaker",
-    fieldLabel: "Decision Maker & Title",
-    value: "Folake Balogun, SAN (Senior Managing Partner)",
-    source: "linkedin.employer-and-name",
-    method: "linkedin_verified",
-    kind: "primary",
-    confidence: 0.88,
-    scoreBand: "strong",
-    status: "auto_applied",
-    rationale: "Senior Advocate of Nigeria verified in legal bar gazette and active firm profile.",
-    timestamp: "20m ago",
-  },
-  {
-    id: "fact-9",
-    accountId: "comp-2",
-    companyName: "Vanguard & Balogun Commercial Chambers",
-    field: "techStack",
-    fieldLabel: "Legal Software & Cloud",
-    value: "Clio Legal, Microsoft Exchange, Cloudflare Enterprise",
-    source: "web.cited-claim",
-    method: "web_crawler",
-    kind: "supporting",
-    confidence: 0.68,
-    scoreBand: "weak",
-    status: "pending_approval",
-    rationale: "Client portal endpoint matches Clio Practice Management integration headers.",
-    timestamp: "15m ago",
-  },
-  {
-    id: "fact-10",
-    accountId: "comp-2",
-    companyName: "Vanguard & Balogun Commercial Chambers",
-    field: "dealValue",
-    fieldLabel: "Litigation Retainer Tier",
-    value: "₦12,000,000 Annual Retainer",
-    source: "search.cites-profile",
-    method: "search_snippet",
-    kind: "supporting",
-    confidence: 0.52,
-    scoreBand: "weak",
-    status: "pending_approval",
-    rationale: "Inferred from partnership roster of 25-35 commercial attorneys.",
-    timestamp: "11m ago",
-  },
+/**
+ * A CRM record shown in the monitoring queue before any agent has looked at it.
+ * The queue is built from the stored leads so this page lists the same companies
+ * the pipeline board lists, instead of a separate cast of demo accounts.
+ */
+function accountFromLead(lead: Lead): AutonomousAccount {
+  const domain = (lead.website || "")
+    .replace(/^https?:\/\//, "")
+    .replace(/^www\./, "")
+    .split("/")[0];
 
-  // PayFlex Africa
-  {
-    id: "fact-11",
-    accountId: "comp-3",
-    companyName: "PayFlex Africa Technologies",
-    field: "email",
-    fieldLabel: "CTO Corporate Email",
-    value: "chinedu@payflex.africa",
-    source: "dns.mx-record",
-    method: "dns_handshake",
-    kind: "primary",
-    confidence: 0.95,
-    scoreBand: "strong",
-    status: "auto_applied",
-    rationale: "Google Workspace MX record confirmed mailbox active.",
-    timestamp: "45m ago",
-  },
-  {
-    id: "fact-12",
-    accountId: "comp-3",
-    companyName: "PayFlex Africa Technologies",
-    field: "directMobile",
-    fieldLabel: "CTO Personal Cell",
-    value: "+234 802 994 5100 (Personal Line)",
-    source: "handle.name-form",
-    method: "handle_inference",
-    kind: "weak",
-    confidence: 0.45,
-    scoreBand: "weak",
-    status: "pending_approval",
-    rationale: "Found in open developer GitHub commit author field. Held back from auto-send until rep confirms.",
-    timestamp: "30m ago",
-  },
-];
-
-const INITIAL_ACCOUNTS: AutonomousAccount[] = [
-  {
-    id: "comp-1",
-    name: "Apex Prime Realty & Landholdings",
-    domain: "apexprimerealty.ng",
-    niche: "Commercial Real Estate Development",
-    location: "Ikoyi, Lagos",
-    dealValue: "₦18.5M",
-    rawDealValue: 18500000,
-    stage: "demo",
-    agentStatus: "enriched",
-    owner: "Cyril Charles",
-    lastAction: "Extracted signature block and verified corporate MX",
+  return {
+    id: `acc-${lead.id}`,
+    name: lead.company,
+    domain: domain || "not recorded",
+    niche: lead.niche || "Not recorded",
+    location: lead.location || "Not recorded",
+    dealValue: `${lead.currency || "NGN"} ${(lead.dealValue || 0).toLocaleString()}`,
+    rawDealValue: lead.dealValue || 0,
+    stage: ACCOUNT_STAGE_FOR_PIPELINE[lead.stage] || "new",
+    agentStatus: "not-audited",
+    lastAction: "In the queue but no agent pass has judged this record yet.",
+    owner: lead.name || "Unassigned",
     facts: {
-      decisionMaker: "Olumide Adeyemi",
-      title: "Managing Director",
-      email: "o.adeyemi@apexprimerealty.ng",
-      phone: "+234 803 491 8293",
-      employees: "45-60 staff",
-      techStack: ["Next.js", "Microsoft 365", "Google Workspace", "HubSpot"],
-      summary: "Major real estate syndication holding firm developing multi-acre mixed-use luxury developments in Eko Atlantic and Victoria Island.",
-      funding: "₦4.2B Series-A Land Capitalization",
+      decisionMaker: lead.name || "Not recorded",
+      title: lead.title || "Not recorded",
+      email: lead.email || "Not recorded",
+      phone: lead.phone || "Not recorded",
+      employees: "Not recorded",
+      techStack: [],
+      summary: lead.notes || "No notes on record.",
     },
-    evidenceLedger: [
-      {
-        id: "ev-1",
-        source: "dns.mx-record",
-        fact: "Corporate mail exchange routed through Google Workspace (ASPMX.L.GOOGLE.COM)",
-        confidence: "verified",
-        confidenceScore: 0.95,
-        status: "auto_applied",
-        timestamp: "12m ago",
-      },
-      {
-        id: "ev-2",
-        source: "crm.signature-block",
-        fact: "Direct phone line confirmed as +234 803 491 8293 with Managing Director title",
-        confidence: "verified",
-        confidenceScore: 0.82,
-        status: "auto_applied",
-        timestamp: "8m ago",
-      },
-      {
-        id: "ev-3",
-        source: "web.crawler",
-        fact: "Announced ₦4.2B land capitalization in Ikoyi corridor via BusinessDay",
-        confidence: "observed",
-        confidenceScore: 0.65,
-        timestamp: "3m ago",
-      },
-    ],
-    agentNotes: [
-      "Agent identified high outbound syndication appetite.",
-      "Evidence ledger confirms zero bounce risk on primary email.",
-      "Auto-scheduled follow-up recheck in 7 days to monitor press announcements.",
-    ],
-    nextRecheck: "In 7 days",
-    recheckReason: "Press announcement and executive hiring monitor",
-  },
-  {
-    id: "comp-2",
-    name: "Vanguard & Balogun Commercial Chambers",
-    domain: "vanguardlegal.ng",
-    niche: "Corporate Commercial Law",
-    location: "Victoria Island, Lagos",
-    dealValue: "₦12.0M",
-    rawDealValue: 12000000,
-    stage: "proposal",
-    agentStatus: "active",
-    owner: "Cyril Charles",
-    lastAction: "Agent currently evaluating arbitration partner listings",
-    facts: {
-      decisionMaker: "Folake Balogun, SAN",
-      title: "Senior Managing Partner",
-      email: "folake.b@vanguardlegal.ng",
-      phone: "+234 814 209 1144",
-      employees: "25-35 attorneys",
-      techStack: ["Clio Legal", "Microsoft Exchange", "Cloudflare"],
-      summary: "Specialized arbitration and cross-border commercial litigation retainers for West African financial institutions.",
-      funding: "Partner-Capitalized Boutique",
-    },
-    evidenceLedger: [
-      {
-        id: "ev-5",
-        source: "law-society.registry",
-        fact: "Senior Advocate of Nigeria (SAN) credentials verified on official bar gazette",
-        confidence: "verified",
-        confidenceScore: 0.88,
-        status: "auto_applied",
-        timestamp: "24m ago",
-      },
-      {
-        id: "ev-6",
-        source: "company.reports",
-        fact: "Lead legal counsel on Flutterwave $35M cross-border licensing escrow",
-        confidence: "verified",
-        confidenceScore: 0.85,
-        status: "auto_applied",
-        timestamp: "18m ago",
-      },
-    ],
-    agentNotes: [
-      "Verified corporate retainer potential for automated compliance contract review.",
-      "Agent detected high urgency for document parsing pipelines.",
-    ],
-    nextRecheck: "In 3 days",
-    recheckReason: "Check if RFP submission window opened",
-  },
-  {
-    id: "comp-3",
-    name: "PayFlex Africa Technologies",
-    domain: "payflex.africa",
-    niche: "B2B Fintech & Payroll API",
-    location: "Yaba / Lekki Phase 1, Lagos",
-    dealValue: "₦28.0M",
-    rawDealValue: 28000000,
-    stage: "new",
-    agentStatus: "needs-review",
-    owner: "Cyril Charles",
-    lastAction: "Weak evidence logged: Pending human review of CTO personal email",
-    facts: {
-      decisionMaker: "Chinedu Eze",
-      title: "Chief Technology Officer",
-      email: "chinedu@payflex.africa",
-      phone: "+234 802 994 5100",
-      employees: "80-120 engineers",
-      techStack: ["Golang", "PostgreSQL", "AWS ECS", "Stripe", "Redis"],
-      summary: "Embedded corporate salary streaming and treasury disbursement infrastructure connecting 400+ African enterprises.",
-      funding: "$6.5M Seed (Tiger Global / Ventures Platform)",
-    },
-    evidenceLedger: [
-      {
-        id: "ev-8",
-        source: "github.repository-inspect",
-        fact: "Public SDK repositories show active Golang and Node client library commits",
-        confidence: "verified",
-        confidenceScore: 0.80,
-        status: "auto_applied",
-        timestamp: "1h ago",
-      },
-      {
-        id: "ev-9",
-        source: "web.search-snippet",
-        fact: "CTO personal contact discovered on open developer forum",
-        confidence: "weak",
-        confidenceScore: 0.45,
-        timestamp: "4m ago",
-      },
-    ],
-    agentNotes: [
-      "Strict evidence rule: Personal Gmail held back from auto-outreach until confirmed.",
-      "Agent drafted tailored enterprise outbound highlighting API reliability.",
-    ],
-    nextRecheck: "Awaiting human review",
-    recheckReason: "Human settling of weak evidence required",
-  },
-];
+    evidenceLedger: [],
+    agentNotes: [],
+    nextRecheck: "Not scheduled",
+  };
+}
 
 function reportAsText(report: AgentReport): string {
   return [
@@ -412,10 +99,25 @@ function reportAsText(report: AgentReport): string {
 }
 
 export default function AutonomousPage() {
-  const [accounts, setAccounts] = useState<AutonomousAccount[]>(INITIAL_ACCOUNTS);
-  const [selectedAccount, setSelectedAccount] = useState<AutonomousAccount | null>(INITIAL_ACCOUNTS[0]);
+  const [accounts, setAccounts] = useState<AutonomousAccount[]>([]);
+  const [selectedAccount, setSelectedAccount] = useState<AutonomousAccount | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [detailTab, setDetailTab] = useState<"overview" | "evidence" | "agent">("overview");
+
+  // Keep the monitoring queue in step with the CRM store it is drawn from.
+  useEffect(() => {
+    const syncFromStore = () => {
+      setAccounts((prev) => {
+        const audited = prev.filter((a) => a.agentStatus !== "not-audited");
+        const auditedIds = new Set(audited.map((a) => a.id));
+        const queue = getStoredLeads().map(accountFromLead).filter((a) => !auditedIds.has(a.id));
+        return [...audited, ...queue];
+      });
+    };
+    syncFromStore();
+    window.addEventListener("iwaju-leads-updated", syncFromStore);
+    return () => window.removeEventListener("iwaju-leads-updated", syncFromStore);
+  }, []);
 
   // Real Agent Loop State (Comp AI Reference)
   const [targetNiche, setTargetNiche] = useState<string>("Commercial Real Estate Development");
@@ -424,7 +126,7 @@ export default function AutonomousPage() {
   const [loopPhase, setLoopPhase] = useState<"idle" | "scouting" | "researching" | "analyzing" | "completed">("idle");
   const [currentStepText, setCurrentStepText] = useState<string>("");
   const [loopProgress, setLoopProgress] = useState<number>(0);
-  const [facts, setFacts] = useState<FactItem[]>(INITIAL_FACTS);
+  const [facts, setFacts] = useState<FactItem[]>([]);
   const [factLedgerTab, setFactLedgerTab] = useState<"suggestions" | "strong" | "all" | "terminal">("suggestions");
   const [editingFactId, setEditingFactId] = useState<string | null>(null);
   const [editFactValue, setEditFactValue] = useState<string>("");
@@ -575,7 +277,7 @@ export default function AutonomousPage() {
       }
 
       const stamp = Date.now();
-      const accountId = `acc-${lead.id}-${stamp}`;
+      const accountId = `acc-${lead.id}`;
       const domain = (lead.website || "")
         .replace(/^https?:\/\//, "")
         .replace(/^www\//, "")
@@ -668,7 +370,7 @@ export default function AutonomousPage() {
         })),
       ];
 
-      setAccounts((prev) => [account, ...prev]);
+      setAccounts((prev) => [account, ...prev.filter((a) => a.id !== account.id)]);
       setFacts((prev) => [...newFacts, ...prev]);
       setAgentLogs((prev) => [
         `[AUDIT] ${lead.company} -> ${statusLabel.toUpperCase()} (${verdict.qualificationScore}/100, confidence ${verdict.confidence.toFixed(2)})`,
@@ -1545,6 +1247,14 @@ export default function AutonomousPage() {
         </div>
 
         <div className="divide-y divide-[#14141a] overflow-y-auto max-h-[400px]">
+          {accounts.length === 0 && (
+            <div className="p-8 text-center">
+              <p className="text-xs text-zinc-400">
+                Nothing in the CRM yet. This queue is built from stored leads, so source accounts in
+                Lead Prospecting first — the agent only judges records that already exist.
+              </p>
+            </div>
+          )}
           {accounts.map((acc) => {
             const accFacts = facts.filter((f) => f.accountId === acc.id || f.companyName === acc.name);
             const strongCount = accFacts.filter((f) => f.status === "auto_applied").length;
@@ -1571,7 +1281,7 @@ export default function AutonomousPage() {
                   </div>
 
                   <p className="text-[11px] text-zinc-400 font-mono">
-                    Verified Decision Maker:{" "}
+                    On record:{" "}
                     <span className="text-zinc-200 font-medium">
                       {acc.facts.decisionMaker} ({acc.facts.title})
                     </span>
@@ -1591,6 +1301,11 @@ export default function AutonomousPage() {
                   {pendingCount > 0 && (
                     <span className="text-[10px] px-2 py-0.5 rounded bg-amber-950/60 text-amber-400 border border-amber-500/30 animate-pulse">
                       {pendingCount} Pending Suggestions
+                    </span>
+                  )}
+                  {acc.agentStatus === "not-audited" && (
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-[#141418] text-zinc-500 border border-[#27272a]">
+                      Not audited
                     </span>
                   )}
                   <span className="text-emerald-400 font-semibold">{acc.dealValue}</span>

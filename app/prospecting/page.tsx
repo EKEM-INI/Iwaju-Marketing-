@@ -11,7 +11,7 @@ import {
 import {
   getStoredLeads,
   saveSingleLead,
-  saveLeads,
+  upsertLeads,
   logActivity,
 } from "@/lib/storage";
 import { Lead, ScrapingLog } from "@/types";
@@ -75,19 +75,23 @@ export default function ProspectingPage() {
       setDiscoveredLeads(returnedLeads);
       setIsLoading(false);
 
-      const providerText = data.provider || "Deep Discovery Engine";
+      // Drop them straight into the shared store so the pipeline board, the
+      // outreach generator and campaigns show these records without a manual save.
+      const { added, merged } = upsertLeads(returnedLeads);
+
+      const providerText = data.provider || "the discovery engine";
 
       logActivity({
         id: `act-${Date.now()}`,
         type: "lead_discovered",
         title: `Discovery Complete: ${niche} (${location})`,
-        description: `Yielded ${returnedLeads.length} accounts via ${providerText}.`,
+        description: `Yielded ${returnedLeads.length} accounts via ${providerText}. ${added} new, ${merged} already on file.`,
         timestamp: new Date().toISOString(),
       });
 
       showToast(
         "Lead Discovery Complete",
-        `Yielded ${returnedLeads.length} qualified B2B accounts via ${providerText}.`,
+        `${returnedLeads.length} accounts from ${providerText}. ${added} added to the pipeline, ${merged} were already on file.`,
         "success"
       );
     } catch (err) {
@@ -96,11 +100,12 @@ export default function ProspectingPage() {
       const fallbackLeads = generateMockLeads(niche, location, count);
       setDiscoveredLeads(fallbackLeads);
       setIsLoading(false);
+      const { added } = upsertLeads(fallbackLeads);
 
       showToast(
-        "Lead Discovery Complete",
-        `Yielded ${fallbackLeads.length} verified accounts via DeepCrawler engine.`,
-        "success"
+        "Discovery API unavailable",
+        `Served ${fallbackLeads.length} bundled sample accounts instead — nothing was freshly sourced. ${added} added to the pipeline.`,
+        "info"
       );
     }
 
@@ -125,11 +130,8 @@ export default function ProspectingPage() {
   };
 
   const handleSaveAll = (leads: Lead[]) => {
-    const current = getStoredLeads();
-    const existingIds = new Set(current.map((l) => l.id));
-    const newToSave = leads.filter((l) => !existingIds.has(l.id));
+    const { added, merged } = upsertLeads(leads);
 
-    saveLeads([...newToSave, ...current]);
     setSavedLeadIds((prev) => {
       const next = new Set(prev);
       leads.forEach((l) => next.add(l.id));
@@ -139,14 +141,14 @@ export default function ProspectingPage() {
     logActivity({
       id: `act-${Date.now()}`,
       type: "lead_saved",
-      title: `Bulk Saved: ${newToSave.length} Leads`,
-      description: `Injected ${newToSave.length} prospects into Pipeline CRM.`,
+      title: `Bulk Saved: ${added} Leads`,
+      description: `Added ${added} prospects to the pipeline; ${merged} were already on file and left untouched.`,
       timestamp: new Date().toISOString(),
     });
 
     showToast(
       "All Leads Saved",
-      `${newToSave.length} new accounts have been added to your pipeline.`,
+      `${added} new accounts added to the pipeline. ${merged} already on file were matched, not duplicated.`,
       "success"
     );
   };
@@ -157,20 +159,22 @@ export default function ProspectingPage() {
       <div>
         <div className="flex items-center gap-2">
           <span className="text-xs uppercase font-extrabold tracking-widest text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-            Automated Crawler
+            Lead Sourcing
           </span>
           <span className="text-xs text-zinc-500">•</span>
           <span className="text-xs text-zinc-400 flex items-center gap-1">
             <Radar className="w-3.5 h-3.5 text-emerald-400" />
-            <span>High-Speed Lead Scraper</span>
+            <span>Apollo sources, ChatGPT judges</span>
           </span>
         </div>
         <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight mt-1">
           B2B Prospecting & Discovery Engine
         </h2>
         <p className="text-xs sm:text-sm text-zinc-400 mt-1 max-w-2xl">
-          Enter an industry vertical and regional perimeter. The simulated crawler parses
-          commercial registries, validates corporate domain MX records, and extracts verified decision-makers.
+          Enter an industry vertical and regional perimeter. With an Apollo key this queries the live
+          Apollo database; with Google Maps configured it queries Places. Without either key it draws
+          from a bundled sample pool so the rest of the app still has data to work with — those records
+          are labelled sample data, and nothing here checks MX records or deliverability on its own.
         </p>
       </div>
 

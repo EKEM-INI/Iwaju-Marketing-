@@ -15,8 +15,8 @@ import {
   Download,
 } from "lucide-react";
 import Link from "next/link";
-import { generateMockLeads } from "@/lib/mock-scraper";
-import { saveLeads, getStoredLeads } from "@/lib/storage";
+import { sampleLeadsAcrossStages } from "@/lib/lead-pool";
+import { upsertLeads } from "@/lib/storage";
 import { useToast } from "@/components/ui/Toast";
 
 interface KanbanBoardProps {
@@ -82,40 +82,19 @@ export function KanbanBoard({
   });
 
   /**
-   * Bulk Seed generator:
-   * Enables the user/client to inject 50 high-value leads into the CRM
-   * to immediately test high-capacity scaling up to 1,000+ accounts.
+   * Bulk Seed: fills the board from the same bundled pool every other page reads,
+   * cycling stable ids through the four stages. Re-running it matches existing
+   * records instead of stacking a second copy of the same company.
    */
-  const handleBulkSeed = (count: number = 50) => {
+  const handleBulkSeed = (count: number = 20) => {
     setIsSeeding(true);
-    const niches = [
-      "Real Estate Development",
-      "Corporate Commercial Law",
-      "Maritime & Deep Sea Freight",
-      "FinTech & Payments",
-      "Private Secondary Schools",
-      "Hospitality & Luxury Resorts",
-    ];
-    const locations = ["Lagos", "Abuja", "Uyo", "Port Harcourt", "London"];
-
-    const newBatch: Lead[] = [];
-    const stages: PipelineStage[] = ["new", "contacted", "meeting", "closed"];
-
-    for (let i = 0; i < count; i++) {
-      const selectedNiche = niches[i % niches.length];
-      const selectedLoc = locations[i % locations.length];
-      const lead = generateMockLeads(selectedNiche, selectedLoc, 1)[0];
-      lead.stage = stages[i % stages.length];
-      newBatch.push(lead);
-    }
-
-    const current = getStoredLeads();
-    saveLeads([...newBatch, ...current]);
+    const batch = sampleLeadsAcrossStages(count);
+    const { added, merged, leads } = upsertLeads(batch);
     setIsSeeding(false);
 
     showToast(
-      "High-Volume Seed Complete",
-      `Injected ${count} enterprise accounts into CRM. Total active: ${current.length + count} accounts.`,
+      "Sample accounts loaded",
+      `${added} new demo records added, ${merged} already on file. The board now holds ${leads.length} accounts, and the same records appear in outreach and campaigns.`,
       "success"
     );
   };
@@ -167,13 +146,13 @@ export function KanbanBoard({
         {/* Right: Actions */}
         <div className="flex items-center gap-2.5">
           <button
-            onClick={() => handleBulkSeed(50)}
+            onClick={() => handleBulkSeed(20)}
             disabled={isSeeding}
             className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold border border-zinc-700 transition-colors"
-            title="Inject 50 sample leads to test high-volume scaling"
+            title="Load the bundled sample accounts spread across all four stages"
           >
             <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-            <span>+ Add 50 Sample Accounts</span>
+            <span>+ Add Sample Accounts</span>
           </button>
 
           <Link

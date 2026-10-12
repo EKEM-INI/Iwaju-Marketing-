@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
     const googleKey = process.env.GOOGLE_MAPS_API_KEY;
 
     let leads: Lead[] = [];
-    let providerUsed = "Simulated Radar Crawler";
+    let providerUsed = "Sample pool — no live source matched";
     let providerNotice = "";
 
     // 1. Primary Engine: Query Apollo.io Live Organizations Search API
@@ -268,7 +268,8 @@ export async function POST(req: NextRequest) {
 
     // 3. Fallback only if Apollo had zero matching accounts for an unsupported remote query
     if (leads.length === 0) {
-      providerUsed = "DeepCrawler High-Yield Engine";
+      providerUsed = "Sample pool (no live source returned a match)";
+      providerNotice = "These are bundled demo records with stable ids, not freshly sourced accounts.";
       leads = generateMockLeads(niche, location, count);
     }
 

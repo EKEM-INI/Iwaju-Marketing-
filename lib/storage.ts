@@ -1,7 +1,9 @@
 import { Lead, ActivityItem, PipelineStage } from "@/types";
+import { normaliseCompanyName } from "@/lib/address-class";
 
 const LEADS_STORAGE_KEY = "iwaju_marketing_leads_v1";
 const ACTIVITIES_STORAGE_KEY = "iwaju_marketing_activities_v1";
+export const LEADS_UPDATED_EVENT = "iwaju-leads-updated";
 
 export const INITIAL_LEADS: Lead[] = [
   {
@@ -204,6 +206,92 @@ export function saveSingleLead(lead: Lead): void {
     timestamp: new Date().toISOString(),
     leadId: lead.id,
   });
+}
+
+export interface UpsertResult {
+  added: number;
+  merged: number;
+  leads: Lead[];
+}
+
+function identityKeys(lead: Lead): string[] {
+  const keys: string[] = [];
+  const email = (lead.email || "").trim().toLowerCase();
+  const company = normaliseCompanyName(lead.company || "");
+  if (email) keys.push(`email:${email}`);
+  if (company) keys.push(`company:${company}`);
+  return keys;
+}
+
+function fillBlanks(existing: Lead, incoming: Lead): Lead {
+  const blank = (value: unknown) => value === undefined || value === null || value === "";
+  const merged: Lead = { ...existing };
+  if (blank(merged.name)) merged.name = incoming.name;
+  if (blank(merged.title)) merged.title = incoming.title;
+  if (blank(merged.email)) merged.email = incoming.email;
+  if (blank(merged.phone)) merged.phone = incoming.phone;
+  if (blank(merged.website)) merged.website = incoming.website;
+  if (blank(merged.niche)) merged.niche = incoming.niche;
+  if (blank(merged.location)) merged.location = incoming.location;
+  if (blank(merged.currency)) merged.currency = incoming.currency;
+  if (blank(merged.notes)) merged.notes = incoming.notes;
+  if (blank(merged.createdAt)) merged.createdAt = incoming.createdAt;
+  if (!merged.dealValue && incoming.dealValue) merged.dealValue = incoming.dealValue;
+  if (merged.score === undefined && incoming.score !== undefined) merged.score = incoming.score;
+  if ((!merged.tags || merged.tags.length === 0) && incoming.tags) merged.tags = incoming.tags;
+  return merged;
+}
+
+/**
+ * Merge records into the store instead of replacing it.
+ *
+ * Matching goes id -> email -> normalised company name, so a company that
+ * arrives from prospecting, the campaign picker and the bulk seed stays one
+ * record. An existing record is never rewritten field-by-field: incoming values
+ * only fill fields that are still blank, because stage, notes and last-touched
+ * time belong to the rep working the account, not to the next search that
+ * happens to return the same company.
+ */
+export function upsertLeads(incoming: Lead[]): UpsertResult {
+  const rebuildIndex = (rows: Lead[]) => {
+    const map = new Map<string, number>();
+    rows.forEach((lead, i) => {
+      if (!map.has(`id:${lead.id}`)) map.set(`id:${lead.id}`, i);
+      identityKeys(lead).forEach((key) => {
+        if (!map.has(key)) map.set(key, i);
+      });
+    });
+    return map;
+  };
+
+  const working = [...getStoredLeads()];
+  let index = rebuildIndex(working);
+  let added = 0;
+  let merged = 0;
+
+  for (const lead of incoming) {
+    if (!lead || !lead.id) continue;
+    let matchAt = index.get(`id:${lead.id}`);
+    if (matchAt === undefined) {
+      matchAt = identityKeys(lead).reduce<number | undefined>((found, key) => {
+        if (found !== undefined) return found;
+        return index.get(key);
+      }, undefined);
+    }
+
+    if (matchAt === undefined) {
+      working.unshift(lead);
+      added += 1;
+      index = rebuildIndex(working);
+      continue;
+    }
+
+    working[matchAt] = fillBlanks(working[matchAt], lead);
+    merged += 1;
+  }
+
+  if (added > 0 || merged > 0) saveLeads(working);
+  return { added, merged, leads: working };
 }
 
 export function updateLeadStage(leadId: string, newStage: PipelineStage): Lead[] {
