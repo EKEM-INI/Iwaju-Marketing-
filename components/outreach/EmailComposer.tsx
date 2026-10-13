@@ -321,8 +321,9 @@ export function EmailComposer({
           </div>
 
           <p className="text-[11px] text-zinc-500 leading-relaxed">
-            ChatGPT only states what you tick here, and must cite each one back. Personal
-            channels, deal values and free-text notes start unchecked.
+            The writer only states what you tick here, and must cite each one back. It answers with
+            ChatGPT, or Gemini when ChatGPT has no key or fails, and says which one wrote the copy.
+            Personal channels, deal values and free-text notes start unchecked.
           </p>
 
           <ul className="space-y-2 max-h-72 overflow-y-auto pr-1">
@@ -412,7 +413,7 @@ export function EmailComposer({
                 ) : (
                   <>
                     <Bot className="w-3 h-3" />
-                    <span>Compose with ChatGPT Brain</span>
+                    <span>Compose with ChatGPT, Gemini fallback</span>
                   </>
                 )}
               </button>

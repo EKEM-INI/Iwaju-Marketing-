@@ -6,6 +6,7 @@ import { Header } from "@/components/layout/Header";
 import { ToastProvider } from "@/components/ui/Toast";
 import { AuthProvider } from "@/components/auth/AuthContext";
 import { LoginGate } from "@/components/auth/LoginGate";
+import { LegacyDataNotice } from "@/components/auth/LegacyDataNotice";
 import { FloatingAskAI } from "@/components/ai/FloatingAskAI";
 import { X } from "lucide-react";
 
@@ -17,6 +18,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <LoginGate>
         <ToastProvider>
           <div className="relative isolate flex h-screen flex-col overflow-hidden bg-background font-sans text-foreground antialiased">
+            <LegacyDataNotice />
+
             {/* Slim top header */}
             <Header onMobileMenuToggle={() => setMobileMenuOpen(!mobileMenuOpen)} />
 

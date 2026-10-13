@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { EmailComposer } from "@/components/outreach/EmailComposer";
 import { OutreachStats } from "@/components/outreach/OutreachStats";
 import { ReplyDecoder } from "@/components/outreach/ReplyDecoder";
+import { CampaignBatchPanel } from "@/components/outreach/CampaignBatchPanel";
 import { getStoredLeads, updateLeadStage } from "@/lib/storage";
 import { Lead, PipelineStage } from "@/types";
 import { Send, Sparkles, Mail, CheckCircle } from "lucide-react";
@@ -67,6 +68,9 @@ function OutreachContent() {
           </p>
         </div>
       )}
+
+      {/* Whole-campaign drafting: one grounded email per contact */}
+      <CampaignBatchPanel leads={leads} />
 
       {/* Playbook and Heuristics */}
       <ReplyDecoder leads={leads} />

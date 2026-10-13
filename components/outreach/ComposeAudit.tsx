@@ -94,6 +94,13 @@ export function ComposeAudit({ email }: { email: AIComposedEmail }) {
         </p>
       )}
 
+      {email.inventedNumbers && email.inventedNumbers.length > 0 && (
+        <p className="text-[11px] text-rose-400 font-mono">
+          Numbers with no approved fact behind them: {email.inventedNumbers.join(", ")}. {email.provider} wrote
+          them, but nothing on the record supports them - delete or replace each one.
+        </p>
+      )}
+
       {email.refusedFacts.length > 0 && <RefusedList facts={email.refusedFacts} />}
     </div>
   );

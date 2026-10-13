@@ -1,5 +1,6 @@
 "use client";
 
+import { scopeKey } from "@/lib/account-scope";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Lead } from "@/types";
 import { EvidenceCounts } from "@/lib/icp";
@@ -50,7 +51,7 @@ interface HygieneRun {
 
 function loadResolutions(): StoredResolution[] {
   try {
-    const raw = localStorage.getItem(VERIFICATION_KEY);
+    const raw = localStorage.getItem(scopeKey(VERIFICATION_KEY));
     const parsed = raw ? JSON.parse(raw) : null;
     return Array.isArray(parsed?.resolutions) ? parsed.resolutions : [];
   } catch {
@@ -95,7 +96,7 @@ export function TrustPanel({ leads, onEvidence, onLeadsSaved }: Props) {
   useEffect(() => {
     try {
       setResolutions(loadResolutions());
-      const rawHygiene = localStorage.getItem(HYGIENE_KEY);
+      const rawHygiene = localStorage.getItem(scopeKey(HYGIENE_KEY));
       if (rawHygiene) setHygiene(JSON.parse(rawHygiene));
     } catch {
       // private mode or a corrupt entry: start clean
@@ -142,7 +143,7 @@ export function TrustPanel({ leads, onEvidence, onLeadsSaved }: Props) {
         runAt,
       }));
       setResolutions(rows);
-      localStorage.setItem(VERIFICATION_KEY, JSON.stringify({ runAt, resolutions: rows }));
+      localStorage.setItem(scopeKey(VERIFICATION_KEY), JSON.stringify({ runAt, resolutions: rows }));
     } catch (err: any) {
       setError(`Could not reach the verification agent: ${err?.message}`);
     } finally {
@@ -168,7 +169,7 @@ export function TrustPanel({ leads, onEvidence, onLeadsSaved }: Props) {
       setHygiene(run);
       setUndone([]);
       setUndoStack(new Map());
-      localStorage.setItem(HYGIENE_KEY, JSON.stringify(run));
+      localStorage.setItem(scopeKey(HYGIENE_KEY), JSON.stringify(run));
     } catch (err: any) {
       setError(`Could not reach the hygiene agent: ${err?.message}`);
     } finally {

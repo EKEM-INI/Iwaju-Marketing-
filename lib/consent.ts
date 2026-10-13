@@ -1,5 +1,6 @@
 import type { ConsentRecord } from "@/types";
 import { isFreeMailDomain, emailDomain, isPlaceholderPhone } from "@/lib/address-class";
+import { scopeKey } from "@/lib/account-scope";
 
 /**
  * Reachability rules for the channels a human has to answer on: phone, WhatsApp
@@ -139,7 +140,7 @@ export function recordConsent(
 export function loadConsentStore(): Record<string, Partial<Record<OutboundChannel, ConsentRecord>>> {
   if (typeof window === "undefined") return {};
   try {
-    const raw = window.localStorage.getItem(CONSENT_STORAGE_KEY);
+    const raw = window.localStorage.getItem(scopeKey(CONSENT_STORAGE_KEY));
     return raw ? JSON.parse(raw) : {};
   } catch {
     return {};
@@ -149,7 +150,7 @@ export function loadConsentStore(): Record<string, Partial<Record<OutboundChanne
 export function saveConsentStore(store: Record<string, Partial<Record<OutboundChannel, ConsentRecord>>>): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(CONSENT_STORAGE_KEY, JSON.stringify(store));
+    window.localStorage.setItem(scopeKey(CONSENT_STORAGE_KEY), JSON.stringify(store));
   } catch {
     // private mode: consent then lives only for this session
   }

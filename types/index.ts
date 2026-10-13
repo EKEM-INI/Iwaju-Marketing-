@@ -178,7 +178,10 @@ export interface AIComposedEmail {
   success: boolean;
   status: ComposeStatus;
   provider?: string;
-  isLiveChatGPT: boolean;
+  modelProvider?: "chatgpt" | "gemini";
+  modelName?: string;
+  isLiveModel: boolean;
+  writersTried?: ("chatgpt" | "gemini")[];
   error?: string;
   tone: string;
   senderName?: string;
@@ -192,6 +195,7 @@ export interface AIComposedEmail {
   refusedFacts: RefusedFact[];
   citedFacts?: GroundedFact[];
   inventedCitations?: string[];
+  inventedNumbers?: string[];
   estimatedReadTimeSec: number;
   compliance?: EmailCompliance;
   compliancePassed?: boolean;

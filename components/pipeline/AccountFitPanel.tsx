@@ -1,5 +1,6 @@
 "use client";
 
+import { scopeKey } from "@/lib/account-scope";
 import React, { useEffect, useMemo, useState } from "react";
 import { Lead } from "@/types";
 import {
@@ -24,7 +25,7 @@ interface StoredConfig {
 
 function loadConfig(): StoredConfig {
   try {
-    const raw = localStorage.getItem(CONFIG_KEY);
+    const raw = localStorage.getItem(scopeKey(CONFIG_KEY));
     if (raw) {
       const parsed = JSON.parse(raw);
       return {
@@ -58,7 +59,7 @@ export function AccountFitPanel({ leads, evidenceByLead, signalsByLead, onApplyO
 
   useEffect(() => {
     try {
-      localStorage.setItem(CONFIG_KEY, JSON.stringify({ weights, profile }));
+      localStorage.setItem(scopeKey(CONFIG_KEY), JSON.stringify({ weights, profile }));
     } catch {
       // storage may be full; the panel still works in-memory
     }

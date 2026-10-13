@@ -1,6 +1,7 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useRef } from "react";
+import { AUTH_USER_KEY, REGISTERED_ACCOUNTS_KEY, setAccountScope } from "@/lib/account-scope";
 
 export interface AuthUser {
   id: string;
@@ -16,7 +17,10 @@ export interface StoredAccount {
   id: string;
   name: string;
   email: string;
-  passwordHash: string;
+  /** WebCrypto SHA-256 over `salt:password`. Legacy rows carried a base64 value instead. */
+  hash?: string;
+  salt?: string;
+  passwordHash?: string;
   verified: boolean;
   verificationCode?: string;
   avatar?: string;
@@ -33,7 +37,9 @@ interface RegisterResult {
 interface AuthContextType {
   user: AuthUser | null;
   isLoading: boolean;
-  loginWithGoogle: (customEmail?: string, customName?: string) => Promise<void>;
+  googleConfigured: boolean;
+  googleClientId: string | null;
+  renderGoogleButton: (el: HTMLElement | null) => void;
   registerWithEmail: (name: string, email: string, password: string) => Promise<RegisterResult>;
   verifyEmailCode: (email: string, code: string) => Promise<boolean>;
   loginWithEmail: (email: string, password: string) => Promise<boolean>;
@@ -43,10 +49,49 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const AUTH_STORAGE_KEY = "iwaju_auth_user_v1";
-const ACCOUNTS_STORAGE_KEY = "iwaju_registered_accounts_v1";
+export const NOT_CONFIGURED_MESSAGE =
+  "Google sign-in is not available yet: NEXT_PUBLIC_GOOGLE_CLIENT_ID is not set in this build. Add it in Vercel Project Settings -> Environment Variables (it is inlined at build time, so redeploy after adding it), or continue with email and password below.";
 
-function parseJwt(token: string) {
+function readAccounts(): StoredAccount[] {
+  try {
+    const raw = localStorage.getItem(REGISTERED_ACCOUNTS_KEY);
+    return raw ? (JSON.parse(raw) as StoredAccount[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeAccounts(accounts: StoredAccount[]): void {
+  localStorage.setItem(REGISTERED_ACCOUNTS_KEY, JSON.stringify(accounts));
+}
+
+function startSession(account: Omit<AuthUser, "lastLogin">): AuthUser {
+  const user: AuthUser = { ...account, lastLogin: new Date().toISOString() };
+  // Scope first: the moment this state lands, pages mount and read storage.
+  setAccountScope(user.id);
+  localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
+  return user;
+}
+
+function toHex(bytes: Uint8Array): string {
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function randomSalt(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return toHex(bytes);
+}
+
+async function hashPassword(password: string, salt: string): Promise<string> {
+  if (!crypto?.subtle) throw new Error("This browser cannot hash passwords (no WebCrypto), so password sign-up is unavailable here.");
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${salt}:${password}`));
+  return toHex(new Uint8Array(digest));
+}
+
+function parseJwt(token: string): any | null {
   try {
     const base64Url = token.split(".")[1];
     const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
@@ -57,103 +102,105 @@ function parseJwt(token: string) {
         .join("")
     );
     return JSON.parse(jsonPayload);
-  } catch (e) {
+  } catch {
     return null;
   }
+}
+
+const GSI_SRC = "https://accounts.google.com/gsi/client";
+
+function loadGsi(clientId: string): Promise<void> {
+  if (typeof window === "undefined") return Promise.reject(new Error(NOT_CONFIGURED_MESSAGE));
+  if ((window as any).google?.accounts?.id) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector(`script[src="${GSI_SRC}"]`);
+    if (existing) {
+      existing.addEventListener("load", () => resolve());
+      existing.addEventListener("error", () => reject(new Error("Google's sign-in script could not load.")));
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = GSI_SRC;
+    script.async = true;
+    script.defer = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Google's sign-in script could not load. Check your network or a blocking extension."));
+    document.head.appendChild(script);
+  });
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID?.trim() || null;
+  const googleConfigured = Boolean(clientId);
+  const gsiReady = useRef(false);
 
   useEffect(() => {
     try {
-      const stored = localStorage.getItem(AUTH_STORAGE_KEY);
+      const stored = localStorage.getItem(AUTH_USER_KEY);
       if (stored) {
-        setUser(JSON.parse(stored));
+        const restored = JSON.parse(stored) as AuthUser;
+        setAccountScope(restored.id);
+        setUser(restored);
+      } else {
+        setAccountScope(null);
       }
     } catch (err) {
       console.error("Failed to restore authentication session:", err);
+      setAccountScope(null);
     } finally {
       setIsLoading(false);
     }
   }, []);
 
-  const loginWithGoogle = async (customEmail?: string, customName?: string) => {
-    setIsLoading(true);
-    try {
-      const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
-
-      if (typeof window !== "undefined" && clientId && (window as any).google?.accounts?.id) {
-        return new Promise<void>((resolve, reject) => {
-          try {
-            (window as any).google.accounts.id.initialize({
-              client_id: clientId,
-              callback: (response: any) => {
-                if (response?.credential) {
-                  const payload = parseJwt(response.credential);
-                  if (payload) {
-                    const authedUser: AuthUser = {
-                      id: `google-${payload.sub || Date.now()}`,
-                      name: payload.name || "Google User",
-                      email: payload.email || "user@gmail.com",
-                      avatar: payload.picture || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(payload.name || "G")}`,
-                      provider: "google",
-                      emailVerified: true,
-                      lastLogin: new Date().toISOString(),
-                    };
-                    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authedUser));
-                    setUser(authedUser);
-                    resolve();
-                    return;
-                  }
-                }
-                reject(new Error("Failed to receive Google credential"));
-              },
-            });
-
-            (window as any).google.accounts.id.prompt((notification: any) => {
-              if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-                completeDirectGoogleLogin(customEmail, customName);
-                resolve();
-              }
-            });
-          } catch (e) {
-            completeDirectGoogleLogin(customEmail, customName);
-            resolve();
-          }
+  /**
+   * Renders Google's own button. The identity only ever comes from the credential Google
+   * hands back - there is no local stand-in, because a made-up session would claim a
+   * sign-in that never happened and would let one browser pretend to be another person.
+   */
+  const renderGoogleButton = (el: HTMLElement | null) => {
+    if (!el || !clientId) return;
+    const google = (window as any).google?.accounts?.id;
+    if (!google) {
+      loadGsi(clientId)
+        .then(() => renderGoogleButton(el))
+        .catch((err) => {
+          el.textContent = err?.message || "Google sign-in could not start.";
         });
-      }
-
-      completeDirectGoogleLogin(customEmail, customName);
-    } catch (error) {
-      console.error("Google authentication error:", error);
-      throw error;
-    } finally {
-      setIsLoading(false);
+      return;
     }
-  };
-
-  const completeDirectGoogleLogin = (customEmail?: string, customName?: string) => {
-    const defaultName = customName || "Google Account User";
-    const defaultEmail = customEmail || "user@gmail.com";
-    const authenticatedUser: AuthUser = {
-      id: `google-${Date.now()}`,
-      name: defaultName,
-      email: defaultEmail,
-      avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(defaultName)}&backgroundColor=059669,10b981,047857`,
-      provider: "google",
-      emailVerified: true,
-      lastLogin: new Date().toISOString(),
-    };
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authenticatedUser));
-    setUser(authenticatedUser);
+    if (!gsiReady.current) {
+      google.initialize({
+        client_id: clientId,
+        auto_select: false,
+        callback: (response: any) => {
+          const payload = response?.credential ? parseJwt(response.credential) : null;
+          if (!payload?.sub) {
+            el.textContent = "Google did not return a credential, so no session was started.";
+            return;
+          }
+          setUser(
+            startSession({
+              id: `google-${payload.sub}`,
+              name: payload.name || "Google account",
+              email: payload.email || "",
+              avatar: payload.picture || undefined,
+              provider: "google",
+              emailVerified: payload.email_verified === true,
+            })
+          );
+        },
+      });
+      gsiReady.current = true;
+    }
+    el.replaceChildren();
+    google.renderButton(el, { theme: "outline", size: "large", text: "signin_with", width: 300 });
   };
 
   const registerWithEmail = async (name: string, email: string, password: string): Promise<RegisterResult> => {
     const normalizedEmail = email.trim().toLowerCase();
-    const stored = localStorage.getItem(ACCOUNTS_STORAGE_KEY);
-    const accounts: StoredAccount[] = stored ? JSON.parse(stored) : [];
+    const accounts = readAccounts();
 
     const existing = accounts.find((a) => a.email.toLowerCase() === normalizedEmail);
     if (existing && existing.verified) {
@@ -161,45 +208,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const salt = randomSalt();
 
     const newAccount: StoredAccount = {
       id: `acc-${Date.now()}`,
       name: name.trim(),
       email: normalizedEmail,
-      passwordHash: btoa(password),
+      salt,
+      hash: await hashPassword(password, salt),
       verified: false,
       verificationCode,
       avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name.trim())}&backgroundColor=059669,10b981`,
       createdAt: new Date().toISOString(),
     };
 
-    const updated = accounts.filter((a) => a.email.toLowerCase() !== normalizedEmail);
-    updated.push(newAccount);
-    localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(updated));
+    writeAccounts([...accounts.filter((a) => a.email.toLowerCase() !== normalizedEmail), newAccount]);
 
     let emailSent = false;
-    let emailError: string | undefined = undefined;
+    let emailError: string | undefined;
     let isRestricted = false;
 
     try {
-      const emailRes = await fetch("/api/auth/send-code", {
+      const res = await fetch("/api/auth/send-code", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: normalizedEmail,
-          code: verificationCode,
-          name: name.trim(),
-        }),
+        body: JSON.stringify({ email: normalizedEmail, code: verificationCode, name: name.trim() }),
       });
-      const emailData = await emailRes.json();
-      if (emailData.success) {
-        emailSent = true;
-      } else {
-        emailError = emailData.error;
-        isRestricted = Boolean(emailData.isRestrictedAccount);
+      const data = await res.json();
+      if (data.success) emailSent = true;
+      else {
+        emailError = data.error;
+        isRestricted = Boolean(data.isRestrictedAccount);
       }
-    } catch (e: any) {
-      emailError = e.message || "Failed to contact email dispatch API.";
+    } catch (err: any) {
+      emailError = err.message || "Failed to contact email dispatch API.";
     }
 
     return { code: verificationCode, emailSent, error: emailError, isRestricted };
@@ -207,112 +249,102 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const verifyEmailCode = async (email: string, code: string): Promise<boolean> => {
     const normalizedEmail = email.trim().toLowerCase();
-    const stored = localStorage.getItem(ACCOUNTS_STORAGE_KEY);
-    const accounts: StoredAccount[] = stored ? JSON.parse(stored) : [];
-
+    const accounts = readAccounts();
     const account = accounts.find((a) => a.email.toLowerCase() === normalizedEmail);
-    if (!account) {
-      throw new Error("Account not found. Please register again.");
-    }
-
+    if (!account) throw new Error("Account not found. Please register again.");
     if (account.verificationCode !== code.trim()) {
       throw new Error("Invalid verification code. Please check your email inbox and enter the 6-digit code.");
     }
 
     account.verified = true;
     delete account.verificationCode;
-    localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(accounts));
+    writeAccounts(accounts);
 
-    const authenticatedUser: AuthUser = {
-      id: account.id,
-      name: account.name,
-      email: account.email,
-      avatar: account.avatar,
-      provider: "email",
-      emailVerified: true,
-      lastLogin: new Date().toISOString(),
-    };
-
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authenticatedUser));
-    setUser(authenticatedUser);
+    setUser(
+      startSession({
+        id: account.id,
+        name: account.name,
+        email: account.email,
+        avatar: account.avatar,
+        provider: "email",
+        emailVerified: true,
+      })
+    );
     return true;
   };
 
   const loginWithEmail = async (email: string, password: string): Promise<boolean> => {
     const normalizedEmail = email.trim().toLowerCase();
-    const stored = localStorage.getItem(ACCOUNTS_STORAGE_KEY);
-    const accounts: StoredAccount[] = stored ? JSON.parse(stored) : [];
-
+    const accounts = readAccounts();
     const account = accounts.find((a) => a.email.toLowerCase() === normalizedEmail);
-    if (!account) {
-      throw new Error("No account found with this email. Please create an account first.");
-    }
+    if (!account) throw new Error("No account found with this email. Please create an account first.");
 
-    if (account.passwordHash !== btoa(password)) {
+    if (account.hash && account.salt) {
+      if ((await hashPassword(password, account.salt)) !== account.hash) {
+        throw new Error("Incorrect password. Please verify and try again.");
+      }
+    } else if (account.passwordHash === btoa(password)) {
+      // Rows written before hashing existed were reversible base64. Upgrade on the
+      // one request where the plaintext is legitimately available.
+      account.salt = randomSalt();
+      account.hash = await hashPassword(password, account.salt);
+      delete account.passwordHash;
+      writeAccounts(accounts);
+    } else {
       throw new Error("Incorrect password. Please verify and try again.");
     }
 
-    if (!account.verified) {
-      throw new Error("Email has not been verified yet. Please complete verification.");
-    }
+    if (!account.verified) throw new Error("Email has not been verified yet. Please complete verification.");
 
-    const authenticatedUser: AuthUser = {
-      id: account.id,
-      name: account.name,
-      email: account.email,
-      avatar: account.avatar,
-      provider: "email",
-      emailVerified: true,
-      lastLogin: new Date().toISOString(),
-    };
-
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authenticatedUser));
-    setUser(authenticatedUser);
+    setUser(
+      startSession({
+        id: account.id,
+        name: account.name,
+        email: account.email,
+        avatar: account.avatar,
+        provider: "email",
+        emailVerified: true,
+      })
+    );
     return true;
   };
 
   const resendVerificationCode = async (email: string): Promise<RegisterResult> => {
     const normalizedEmail = email.trim().toLowerCase();
-    const stored = localStorage.getItem(ACCOUNTS_STORAGE_KEY);
-    const accounts: StoredAccount[] = stored ? JSON.parse(stored) : [];
-
+    const accounts = readAccounts();
     const account = accounts.find((a) => a.email.toLowerCase() === normalizedEmail);
     if (!account) throw new Error("Account not found.");
 
     const newCode = Math.floor(100000 + Math.random() * 900000).toString();
     account.verificationCode = newCode;
-    localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify(accounts));
+    writeAccounts(accounts);
 
     let emailSent = false;
-    let emailError: string | undefined = undefined;
+    let emailError: string | undefined;
     let isRestricted = false;
 
     try {
-      const emailRes = await fetch("/api/auth/send-code", {
+      const res = await fetch("/api/auth/send-code", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: normalizedEmail,
-          code: newCode,
-          name: account.name,
-        }),
+        body: JSON.stringify({ email: normalizedEmail, code: newCode, name: account.name }),
       });
-      const emailData = await emailRes.json();
-      if (emailData.success) {
-        emailSent = true;
-      } else {
-        emailError = emailData.error;
-        isRestricted = Boolean(emailData.isRestrictedAccount);
+      const data = await res.json();
+      if (data.success) emailSent = true;
+      else {
+        emailError = data.error;
+        isRestricted = Boolean(data.isRestrictedAccount);
       }
-    } catch (e: any) {
-      emailError = e.message;
+    } catch (err: any) {
+      emailError = err.message;
     }
 
     return { code: newCode, emailSent, error: emailError, isRestricted };
   };
 
   const logout = () => {
-    localStorage.removeItem(AUTH_STORAGE_KEY);
+    localStorage.removeItem(AUTH_USER_KEY);
+    setAccountScope(null);
     setUser(null);
   };
 
@@ -321,7 +353,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       value={{
         user,
         isLoading,
-        loginWithGoogle,
+        googleConfigured,
+        googleClientId: clientId,
+        renderGoogleButton,
         registerWithEmail,
         verifyEmailCode,
         loginWithEmail,
@@ -336,8 +370,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
+  if (!context) throw new Error("useAuth must be used within an AuthProvider");
   return context;
 }

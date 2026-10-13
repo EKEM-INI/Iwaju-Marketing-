@@ -1,5 +1,6 @@
 "use client";
 
+import { scopeKey } from "@/lib/account-scope";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity,
@@ -94,12 +95,12 @@ export function AgentWorkbench({ leads, evidenceByLead, onSignals, onLeadsSaved 
 
   useEffect(() => {
     try {
-      const rawSignals = localStorage.getItem(SIGNALS_KEY);
+      const rawSignals = localStorage.getItem(scopeKey(SIGNALS_KEY));
       if (rawSignals) {
         const parsed = JSON.parse(rawSignals);
         setScans(Array.isArray(parsed?.scans) ? parsed.scans : []);
       }
-      const rawForecast = localStorage.getItem(FORECAST_KEY);
+      const rawForecast = localStorage.getItem(scopeKey(FORECAST_KEY));
       if (rawForecast) setForecast(JSON.parse(rawForecast));
       setConsent(loadConsentStore());
     } catch {
@@ -146,7 +147,7 @@ export function AgentWorkbench({ leads, evidenceByLead, onSignals, onLeadsSaved 
       setEnvelopes((prev) => ({ ...prev, signals: envelope }));
       if (envelope.success && envelope.data) {
         setScans(envelope.data);
-        localStorage.setItem(SIGNALS_KEY, JSON.stringify({ runAt: envelope.ranAt, scans: envelope.data }));
+        localStorage.setItem(scopeKey(SIGNALS_KEY), JSON.stringify({ runAt: envelope.ranAt, scans: envelope.data }));
       }
     } catch (err: any) {
       setEnvelopes((prev) => ({ ...prev, signals: { success: false, agent: "Buying-Signal Monitor", status: "provider_error", provider: "none", live: false, ranAt: new Date().toISOString(), error: `Could not reach the agent: ${err?.message}` } }));
@@ -238,7 +239,7 @@ export function AgentWorkbench({ leads, evidenceByLead, onSignals, onLeadsSaved 
       setEnvelopes((prev) => ({ ...prev, forecast: envelope }));
       if (envelope.success && envelope.data) {
         setForecast(envelope.data);
-        localStorage.setItem(FORECAST_KEY, JSON.stringify(envelope.data));
+        localStorage.setItem(scopeKey(FORECAST_KEY), JSON.stringify(envelope.data));
       }
     } finally {
       setBusy(null);

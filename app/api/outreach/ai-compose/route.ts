@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
-import { getChatGptKey, getChatGptModel, requestChatGptJson, PRIMARY_KEY_NAME } from "@/lib/chatgpt";
+import { getChatGptKey, getChatGptModel, PRIMARY_KEY_NAME } from "@/lib/chatgpt";
+import { getGeminiKey, PRIMARY_GEMINI_KEY_NAME } from "@/lib/gemini";
+import { hasAnyWriterKey, providerLabel, writeWithFallback } from "@/lib/outreach-writer";
 import { looksLikePhoneValue, isRoleAddress, isFreeMailDomain, emailDomain } from "@/lib/address-class";
 
 export const runtime = "nodejs";
@@ -27,10 +29,12 @@ const TONES = ["direct", "consultative", "peer_to_peer", "short_question"] as co
 export async function GET() {
   return NextResponse.json({
     status: "ok",
-    hasApiKey: Boolean(getChatGptKey()),
     engine: "Fact-Grounded Outreach Copilot",
-    envKey: PRIMARY_KEY_NAME,
-    model: getChatGptModel(),
+    writers: [
+      { provider: "chatgpt", envKey: "CHAT_GPT_API", model: getChatGptModel(), configured: Boolean(getChatGptKey()) },
+      { provider: "gemini", envKey: PRIMARY_GEMINI_KEY_NAME, configured: Boolean(getGeminiKey()) },
+    ],
+    order: "ChatGPT first, Gemini only when ChatGPT is absent or failing",
     grounding: "cites only the approved facts it is given; refuses sensitive or unverified ones",
   });
 }
@@ -107,11 +111,11 @@ export async function POST(req: Request) {
     });
   }
 
-  if (!getChatGptKey()) {
+  if (!hasAnyWriterKey()) {
     return NextResponse.json({
       success: false,
       status: "no_key",
-      error: `No live email was written: ${PRIMARY_KEY_NAME} is not set in Vercel Environment Variables. No static template is substituted, because template copy would claim things no approved fact supports.`,
+      error: `No live email was written: neither ${PRIMARY_KEY_NAME} nor ${PRIMARY_GEMINI_KEY_NAME} is set in Vercel Environment Variables. No static template is substituted, because template copy would claim things no approved fact supports.`,
       ...baseResponse,
     });
   }
@@ -157,13 +161,14 @@ Return JSON:
   "estimatedReadTimeSec": 25
 }`;
 
-  const result = await requestChatGptJson<any>(systemPrompt, userPrompt, 0.4);
+  const result = await writeWithFallback<any>(systemPrompt, userPrompt, 0.4);
 
   if (!result.ok) {
     return NextResponse.json({
       success: false,
       status: result.status,
       error: result.message,
+      writersTried: result.attempted,
       ...baseResponse,
     });
   }
@@ -185,11 +190,17 @@ Return JSON:
       : false,
   };
 
+  const approvedText = approvedFacts.map((f) => f.value.toLowerCase()).join(" ");
+  const numbersInBody = Array.from(new Set(bodyText.match(/\b\d[\d.,]*\b/g) || []));
+  const inventedNumberList = numbersInBody.filter((n) => !approvedText.includes(n.toLowerCase()));
+
   return NextResponse.json({
     success: true,
     status: "live",
-    provider: `ChatGPT (${result.model})`,
-    isLiveChatGPT: true,
+    provider: providerLabel(result.modelProvider, result.modelName),
+    modelProvider: result.modelProvider,
+    modelName: result.modelName,
+    isLiveModel: true,
     subject: data.subject || "",
     altSubjects: Array.isArray(data.altSubjects) ? data.altSubjects : [],
     body: bodyText,
@@ -197,10 +208,14 @@ Return JSON:
     followUpBody: data.followUpBody || "",
     citedFacts: approvedFacts.filter((f) => cited.includes(f.id)),
     inventedCitations,
+    inventedNumbers: inventedNumberList,
     estimatedReadTimeSec: Number(data.estimatedReadTimeSec) || 0,
     compliance,
     compliancePassed:
-      compliance.optOutPresent && compliance.onlyApprovedFactsCited && !compliance.inventedNumbersDetected,
+      compliance.optOutPresent &&
+      compliance.onlyApprovedFactsCited &&
+      !compliance.inventedNumbersDetected &&
+      inventedNumberList.length === 0,
     ...baseResponse,
   });
 }

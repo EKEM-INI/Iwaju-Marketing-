@@ -1,5 +1,6 @@
 "use client";
 
+import { scopeKey } from "@/lib/account-scope";
 import React, { useState, useRef, useEffect } from "react";
 import {
   Sparkles,
@@ -48,7 +49,7 @@ export function FloatingAskAI() {
   // Restore client custom key and check server status
   useEffect(() => {
     try {
-      const stored = localStorage.getItem("iwaju_gemini_api_key");
+      const stored = localStorage.getItem(scopeKey("iwaju_gemini_api_key"));
       if (stored) setCustomKey(stored);
     } catch (e) {
       // ignore
@@ -79,9 +80,9 @@ export function FloatingAskAI() {
 
   const handleSaveCustomKey = () => {
     if (customKey.trim()) {
-      localStorage.setItem("iwaju_gemini_api_key", customKey.trim());
+      localStorage.setItem(scopeKey("iwaju_gemini_api_key"), customKey.trim());
     } else {
-      localStorage.removeItem("iwaju_gemini_api_key");
+      localStorage.removeItem(scopeKey("iwaju_gemini_api_key"));
     }
     setShowSettings(false);
   };
