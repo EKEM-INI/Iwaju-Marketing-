@@ -26,6 +26,10 @@ export const SCOPED_DATA_KEYS = [
   "iwaju_forecast_v1",
   "iwaju_icp_config_v1",
   "iwaju_gemini_api_key",
+  "iwaju_gmail_token_v1",
+  "iwaju_send_policy_v1",
+  "iwaju_send_ledger_v1",
+  "iwaju_outbox_v1",
 ] as const;
 
 let scope: string | null = null;

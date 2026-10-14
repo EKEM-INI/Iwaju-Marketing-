@@ -25,6 +25,17 @@ export default function ProspectingPage() {
   const [logs, setLogs] = useState<ScrapingLog[]>([]);
   const [discoveredLeads, setDiscoveredLeads] = useState<Lead[]>([]);
   const [savedLeadIds, setSavedLeadIds] = useState<Set<string>>(new Set());
+  const [noResults, setNoResults] = useState<{
+    provider: string;
+    notice: string;
+    warnings: string[];
+    error: string;
+  } | null>(null);
+  const [lastQuery, setLastQuery] = useState<{ niche: string; location: string; count: number }>({
+    niche: "School",
+    location: "Uyo",
+    count: 6,
+  });
 
   // Load existing leads to sync saved states
   useEffect(() => {
@@ -45,11 +56,14 @@ export default function ProspectingPage() {
     niche: string,
     location: string,
     count: number,
-    source: string
+    source: string,
+    revealEmails: boolean
   ) => {
     setIsLoading(true);
     setProgress(15);
     setDiscoveredLeads([]);
+    setNoResults(null);
+    setLastQuery({ niche, location, count });
 
     const logList = generateScrapingLogs(niche, location);
     setLogs(logList);
@@ -61,17 +75,37 @@ export default function ProspectingPage() {
       const res = await fetch("/api/prospecting/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ niche, location, count, source }),
+        body: JSON.stringify({ niche, location, count, source, allowDemo: false, revealEmails }),
       });
 
       const data = await res.json();
       setProgress(100);
 
-      const returnedLeads: Lead[] =
-        data.leads && data.leads.length > 0
-          ? data.leads
-          : generateMockLeads(niche, location, count);
+      const returnedLeads: Lead[] = Array.isArray(data.leads) ? data.leads : [];
 
+      if (returnedLeads.length === 0) {
+        // Nothing live was found, so nothing is written. The sample pool is only added when
+        // someone asks for it by name - a silent swap would fill the CRM with records the
+        // sender refuses to mail.
+        setDiscoveredLeads([]);
+        setNoResults({
+          provider: data.provider || "the sourcing engine",
+          notice: String(data.notice || ""),
+          warnings: Array.isArray(data.warnings) ? data.warnings : [],
+          error: data.success ? "" : String(data.error || "The search endpoint refused the request."),
+        });
+        setIsLoading(false);
+        showToast(
+          "No live accounts",
+          "Apollo and Places returned nothing for this target, so no records were created. Read the reason on the page.",
+          "info"
+        );
+        clearTimeout(p1);
+        clearTimeout(p2);
+        return;
+      }
+
+      setNoResults(null);
       setDiscoveredLeads(returnedLeads);
       setIsLoading(false);
 
@@ -89,30 +123,53 @@ export default function ProspectingPage() {
         timestamp: new Date().toISOString(),
       });
 
+      const withAddress = returnedLeads.filter((l) => l.email && l.emailStatus !== "unavailable").length;
       showToast(
         "Lead Discovery Complete",
-        `${returnedLeads.length} accounts from ${providerText}. ${added} added to the pipeline, ${merged} were already on file.`,
+        `${returnedLeads.length} accounts from ${providerText}. ${added} added, ${merged} already on file. ${withAddress} carry a real mailbox and can be mailed; the rest have no address written for them.`,
         "success"
       );
-    } catch (err) {
+    } catch (err: any) {
       console.error("Search API error:", err);
       setProgress(100);
-      const fallbackLeads = generateMockLeads(niche, location, count);
-      setDiscoveredLeads(fallbackLeads);
+      setDiscoveredLeads([]);
+      setNoResults({
+        provider: "no engine reached",
+        notice: "",
+        warnings: [],
+        error: `The search request failed before it completed: ${err?.message || "network error"}. No records were created.`,
+      });
       setIsLoading(false);
-      const { added } = upsertLeads(fallbackLeads);
-
-      showToast(
-        "Discovery API unavailable",
-        `Served ${fallbackLeads.length} bundled sample accounts instead — nothing was freshly sourced. ${added} added to the pipeline.`,
-        "info"
-      );
+      showToast("Discovery failed", "The search never completed. Nothing was written to the pipeline.", "error");
     }
 
     return () => {
       clearTimeout(p1);
       clearTimeout(p2);
     };
+  };
+
+  /**
+   * The sample pool stays available, but only when someone asks for it by name. Silent substitution
+   * would fill the CRM with records the sender refuses to mail.
+   */
+  const loadSamplePool = () => {
+    const samples = generateMockLeads(lastQuery.niche, lastQuery.location, lastQuery.count);
+    const { added, merged } = upsertLeads(samples);
+    setDiscoveredLeads(samples);
+    setNoResults(null);
+    logActivity({
+      id: `act-${Date.now()}`,
+      type: "lead_discovered",
+      title: `Sample pool loaded: ${samples.length} demo records`,
+      description: `Added deliberately as demo data for ${lastQuery.niche} / ${lastQuery.location}. These are not sourced accounts and the send queue refuses them.`,
+      timestamp: new Date().toISOString(),
+    });
+    showToast(
+      "Sample pool loaded",
+      `${added} demo record(s) added, ${merged} already on file. They are labelled demo and cannot be mailed from the Outbox.`,
+      "info"
+    );
   };
 
   const handleSaveLead = (lead: Lead) => {
@@ -172,9 +229,10 @@ export default function ProspectingPage() {
         </h2>
         <p className="text-xs sm:text-sm text-zinc-400 mt-1 max-w-2xl">
           Enter an industry vertical and regional perimeter. With an Apollo key this queries the live
-          Apollo database; with Google Maps configured it queries Places. Without either key it draws
-          from a bundled sample pool so the rest of the app still has data to work with — those records
-          are labelled sample data, and nothing here checks MX records or deliverability on its own.
+          Apollo database — organisations, then the decision-makers at them, with a mailbox only when you
+          opt in to the paid reveal. With Google Maps configured it queries Places. If neither produces a
+          match you get the reason on screen and an explicit button for bundled demo records; nothing is
+          invented to fill a gap, and demo records can never be mailed.
         </p>
       </div>
 
@@ -184,6 +242,37 @@ export default function ProspectingPage() {
       {/* Animated Scraping Terminal */}
       {(isLoading || logs.length > 0) && (
         <ScrapingTerminal logs={logs} progress={progress} />
+      )}
+
+      {noResults && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 space-y-2">
+          <p className="text-xs font-semibold text-amber-300">
+            Nothing was created for {lastQuery.niche} in {lastQuery.location}.
+          </p>
+          <p className="text-[11px] text-zinc-400 leading-relaxed">
+            Queried through: <span className="font-mono text-zinc-300">{noResults.provider}</span>
+            {noResults.notice ? ` — ${noResults.notice}` : ""}
+          </p>
+          {noResults.error && <p className="text-[11px] text-amber-400">{noResults.error}</p>}
+          {noResults.warnings.length > 0 && (
+            <ul className="text-[11px] text-zinc-400 space-y-1">
+              {noResults.warnings.map((w, i) => (
+                <li key={i}>• {w}</li>
+              ))}
+            </ul>
+          )}
+          <p className="text-[11px] text-zinc-500 leading-relaxed">
+            A live search needs <span className="font-mono">APOLLO_API_KEY</span> on the deployment, and a mailable
+            address needs the mailbox reveal, which spends Apollo credits. Neither can be filled in by a model, so
+            this page leaves the pipeline exactly as it was.
+          </p>
+          <button
+            onClick={loadSamplePool}
+            className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[11px] font-semibold border border-zinc-700"
+          >
+            Load bundled sample records (demo only, cannot be sent)
+          </button>
+        </div>
       )}
 
       {/* Discovered Leads Result Grid */}

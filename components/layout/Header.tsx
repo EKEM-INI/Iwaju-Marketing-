@@ -18,6 +18,8 @@ const PAGE_TITLES: Record<string, string> = {
   "/prospecting": "Lead Prospecting",
   "/pipeline": "Pipeline CRM",
   "/outreach": "Outreach Engine",
+  "/outbox": "Outbox",
+  "/campaigns": "Campaigns",
 };
 
 function initials(name?: string, email?: string): string {

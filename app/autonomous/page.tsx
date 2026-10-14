@@ -29,6 +29,7 @@ import {
 import { getStoredLeads, logActivity, saveLeads } from "@/lib/storage";
 import { factsFromLead, stripCitations } from "@/lib/outreach-facts";
 import { ComposeAudit } from "@/components/outreach/ComposeAudit";
+import { AutonomousRunPanel } from "@/components/ai/AutonomousRunPanel";
 import { Lead, FactItem, AutonomousAccount, AISortResult, AIComposedEmail, EvaluatedLead, LeadVerdict, AgentReport, PipelineStage } from "@/types";
 
 const ACCOUNT_STAGE_FOR_PIPELINE: Record<PipelineStage, AutonomousAccount["stage"]> = {
@@ -716,6 +717,9 @@ export default function AutonomousPage() {
           </div>
         </div>
       </div>
+
+      {/* FULL AUTONOMOUS RUN: APOLLO -> BRAIN -> WRITER -> SEND */}
+      <AutonomousRunPanel defaultNiche={targetNiche} defaultLocation={targetCity} />
 
       {/* TARGET SPECIFICATION & AGENT LOOP LAUNCHER */}
       <div className="p-5 bg-[#09090b] border border-[#27272a] rounded-xl space-y-4">

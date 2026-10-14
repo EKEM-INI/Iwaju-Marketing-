@@ -8,8 +8,9 @@ import { LEADS_UPDATED_EVENT } from "@/lib/storage";
 import { decideChannel, loadConsentStore } from "@/lib/consent";
 import { factsFromLead } from "@/lib/outreach-facts";
 import { buildCsv, copyToClipboard, downloadText, mailtoHref } from "@/lib/handoff";
+import { queueDrafts } from "@/lib/outbox";
 import { useToast } from "@/components/ui/Toast";
-import { Bot, Copy, Download, Mail, RefreshCw, ShieldAlert, Users } from "lucide-react";
+import { Bot, Copy, Download, Inbox, Mail, RefreshCw, ShieldAlert, Users } from "lucide-react";
 
 interface Draft {
   leadId: string;
@@ -142,9 +143,32 @@ export function CampaignBatchPanel({ leads }: Props) {
       if (!data.success) {
         showToast("No drafts written", data.error || "The writer refused this batch.", "info");
       } else {
+        const drafts = data.data?.generated || [];
+        const byId = new Map(preflight.ready.map((l) => [String(l.id), l]));
+        const queued = queueDrafts(
+          drafts.map((d) => {
+            const lead = byId.get(String(d.leadId));
+            return {
+              leadId: d.leadId,
+              company: d.company,
+              to: d.to,
+              subject: d.subject,
+              body: d.body,
+              campaignId: campaign?.id,
+              campaignName: campaign?.name,
+              provider: d.provider,
+              modelProvider: String(data.provider || d.provider || ""),
+              modelName: "",
+              usedFactIds: d.usedFactIds,
+              inventedNumbers: d.inventedNumbers,
+              sourcedFrom: lead?.sourcedFrom,
+              emailStatus: lead?.emailStatus,
+            };
+          })
+        );
         showToast(
-          "Drafts ready",
-          `${data.data?.generated.length ?? 0} unique draft(s), ${data.data?.skipped.length ?? 0} skipped. Nothing was sent.`,
+          "Drafts queued in the Outbox",
+          `${drafts.length} draft(s) written, ${data.data?.skipped.length ?? 0} skipped. ${queued.added} new message(s) now wait on your approval in the Outbox — nothing was sent.`,
           "success"
         );
       }
@@ -220,7 +244,7 @@ export function CampaignBatchPanel({ leads }: Props) {
           <p className="text-[11px] text-zinc-400 mt-1 max-w-2xl">
             One write per contact, each from that contact&apos;s own record. ChatGPT writes first and Gemini answers when
             ChatGPT has no key. A contact with no usable channel or no safe fact is listed with the reason instead of
-            receiving recycled copy. Nothing leaves this browser.
+            receiving recycled copy. Each draft is parked in the Outbox for your approval; this page sends nothing.
           </p>
         </div>
         <label className="flex items-center gap-2 text-[11px] text-zinc-400">
@@ -286,6 +310,15 @@ export function CampaignBatchPanel({ leads }: Props) {
             <Download className="w-3.5 h-3.5" />
             <span>Export drafts as CSV</span>
           </button>
+        )}
+        {(data?.generated.length ?? 0) > 0 && (
+          <Link
+            href="/outbox"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 text-[11px] font-semibold"
+          >
+            <Inbox className="w-3.5 h-3.5" />
+            <span>Review in Outbox</span>
+          </Link>
         )}
         {result?.note && <p className="text-[10px] font-mono text-zinc-500 flex-1 min-w-[220px]">{result.note}</p>}
       </div>

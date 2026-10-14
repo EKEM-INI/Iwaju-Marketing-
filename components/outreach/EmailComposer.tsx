@@ -7,10 +7,12 @@ import { factsFromLead, stripCitations } from "@/lib/outreach-facts";
 import { TemplateSelector } from "@/components/outreach/TemplateSelector";
 import { ComposeAudit } from "@/components/outreach/ComposeAudit";
 import { useToast } from "@/components/ui/Toast";
+import { queueDrafts } from "@/lib/outbox";
 import {
   Copy,
   Check,
   Send,
+  Inbox,
   ExternalLink,
   Sparkles,
   User,
@@ -126,6 +128,45 @@ export function EmailComposer({
       "success"
     );
     setTimeout(() => setCopiedBody(false), 2000);
+  };
+
+  const handleQueueInOutbox = () => {
+    if (!currentLead) return;
+    if (!subjectText.trim() || !bodyText.trim()) {
+      showToast("Nothing to queue", "A blank subject or body cannot be queued. Write the message first.", "error");
+      return;
+    }
+    if (!currentLead.email.trim()) {
+      showToast(
+        "No address on record",
+        "This lead has no email address, so there is nothing to send to. Find the person first — Apollo people search reveals a real mailbox.",
+        "info"
+      );
+      return;
+    }
+    const { added, alreadyThere } = queueDrafts([
+      {
+        leadId: String(currentLead.id),
+        company: currentLead.company,
+        to: currentLead.email,
+        subject: subjectText,
+        body: bodyText,
+        provider: audit?.provider || "Outreach Engine",
+        modelProvider: audit?.modelProvider || "",
+        modelName: audit?.modelName || "",
+        usedFactIds: (audit?.citedFacts || []).map((f) => f.id),
+        inventedNumbers: audit?.inventedNumbers || [],
+        sourcedFrom: currentLead.sourcedFrom,
+        emailStatus: currentLead.emailStatus,
+      },
+    ]);
+    showToast(
+      added > 0 ? "Queued in the Outbox" : "Already queued",
+      added > 0
+        ? `${currentLead.company} waits in the Outbox for your approval. Nothing was sent from here.`
+        : `${alreadyThere} identical draft(s) already sit in the Outbox for this lead and subject.`,
+      "info"
+    );
   };
 
   const handleMarkContacted = () => {
@@ -510,6 +551,15 @@ export function EmailComposer({
               >
                 <Copy className="w-3.5 h-3.5 text-emerald-400" />
                 <span>Copy Full Email</span>
+              </button>
+
+              <button
+                onClick={handleQueueInOutbox}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-semibold text-xs border border-zinc-700 transition-colors"
+                title="Park this draft in the Outbox so you can approve and send it from your connected Gmail"
+              >
+                <Inbox className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Queue in Outbox</span>
               </button>
 
               {/* Functional Open in Email App Dropdown */}

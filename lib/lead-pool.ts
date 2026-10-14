@@ -415,6 +415,7 @@ export function leadFromPoolEntry(entry: PoolEntry, stage: PipelineStage = "new"
     notes: `Sample record from the bundled ${SAMPLE_SOURCE}. Not verified, not sourced from Apollo — treat every field as unproven until checked.`,
     tags: [...entry.tags, "Sample Data"],
     createdAt: new Date(now - entry.discoveredDaysAgo * DAYS).toISOString(),
+    sourcedFrom: "demo",
   };
 }
 

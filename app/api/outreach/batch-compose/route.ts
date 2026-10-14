@@ -159,6 +159,15 @@ export async function POST(req: NextRequest) {
   const overCap = leads.length > MAX_RECORDS;
 
   const outcomes = await mapWithConcurrency(considered, CONCURRENT_CALLS, async (lead) => {
+    if (lead.sourcedFrom === "demo") {
+      return {
+        kind: "skipped" as const,
+        lead,
+        writerCaused: false,
+        reason: "Bundled demo record. Its address was never sourced from Apollo, so no draft is written for it.",
+      };
+    }
+
     const decision = decideChannel("email", {
       consent: consentStore[lead.id]?.email,
       phone: lead.phone,

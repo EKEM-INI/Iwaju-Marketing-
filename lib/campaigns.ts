@@ -309,7 +309,9 @@ export function statsForCampaign(
   });
 
   const replied = count("replied");
-  const handedOn = campaignTouches.filter((t) => t.outcome === "handed_off" || t.outcome === "replied").length;
+  const handedOn = campaignTouches.filter(
+    (t) => t.outcome === "sent" || t.outcome === "handed_off" || t.outcome === "replied"
+  ).length;
 
   return {
     contacts: campaign.leadIds.length,
@@ -332,12 +334,12 @@ export function statsForCampaign(
       })),
     byStage,
     valueByCurrency: Array.from(groups.entries()).map(([currency, v]) => ({ currency, total: v.total, count: v.count })),
-    measuredFrom: "Recorded touches only. Every count below comes from something you marked, not from a mail server.",
+    measuredFrom: "Recorded touches plus whatever Gmail accepted. Reply rates count messages that went out, not messages that were opened.",
     notMeasured: [
       "Opens — no inbox connection, so no open events",
       "Clicks — no link tracking in this app",
-      "Bounces — nothing is sent from here, so nothing bounces back",
-      "Deliverability — no SMTP or inbox provider feedback loop",
+      "Bounces — the send-only Gmail scope cannot read your inbox, so a bounce notice never reaches this app",
+      "Deliverability — no inbox provider feedback loop",
       "Time-to-reply — you record the reply, not when it arrived",
     ],
   };

@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -8,12 +8,14 @@ import {
   Radar,
   Kanban,
   Send,
+  Inbox,
   Megaphone,
   RotateCcw,
   Cpu,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { resetToSeedData } from "@/lib/storage";
+import { OUTBOX_UPDATED_EVENT, listOutbox } from "@/lib/outbox";
 import { useToast } from "@/components/ui/Toast";
 
 export const NAV_ITEMS = [
@@ -22,6 +24,7 @@ export const NAV_ITEMS = [
   { name: "Lead Prospecting", href: "/prospecting", icon: Radar },
   { name: "Pipeline CRM", href: "/pipeline", icon: Kanban },
   { name: "Outreach Engine", href: "/outreach", icon: Send },
+  { name: "Outbox", href: "/outbox", icon: Inbox },
   { name: "Campaigns", href: "/campaigns", icon: Megaphone },
 ];
 
@@ -42,6 +45,17 @@ function useReset() {
   };
 }
 
+function usePendingDrafts(): number {
+  const [pending, setPending] = useState(0);
+  useEffect(() => {
+    const count = () => setPending(listOutbox().filter((item) => item.status === "awaiting_review").length);
+    count();
+    window.addEventListener(OUTBOX_UPDATED_EVENT, count);
+    return () => window.removeEventListener(OUTBOX_UPDATED_EVENT, count);
+  }, []);
+  return pending;
+}
+
 function RailTooltip({ label }: { label: string }) {
   return (
     <span
@@ -56,6 +70,7 @@ function RailTooltip({ label }: { label: string }) {
 export function Sidebar({ className, onNavigate, variant = "rail" }: SidebarProps) {
   const pathname = usePathname();
   const handleReset = useReset();
+  const pendingDrafts = usePendingDrafts();
 
   if (variant === "full") {
     return (
@@ -81,6 +96,11 @@ export function Sidebar({ className, onNavigate, variant = "rail" }: SidebarProp
             >
               <Icon className="size-4" />
               <span>{item.name}</span>
+              {item.href === "/outbox" && pendingDrafts > 0 && (
+                <span className="ml-auto rounded-full border border-emerald-500/30 bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-mono text-emerald-400">
+                  {pendingDrafts}
+                </span>
+              )}
             </Link>
           );
         })}
@@ -123,6 +143,11 @@ export function Sidebar({ className, onNavigate, variant = "rail" }: SidebarProp
           >
             <Icon className="size-[18px]" />
             <span className="sr-only">{item.name}</span>
+            {item.href === "/outbox" && pendingDrafts > 0 && (
+              <span className="absolute -right-1 -top-1 min-w-[16px] rounded-full border border-border bg-popover px-1 text-center font-mono text-[10px] leading-4 text-emerald-500 shadow-sm">
+                {pendingDrafts > 9 ? "9+" : pendingDrafts}
+              </span>
+            )}
             <RailTooltip label={item.name} />
           </Link>
         );

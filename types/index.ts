@@ -19,6 +19,11 @@ export interface Lead {
   createdAt: string;
   lastContactedAt?: string;
   contactMethod?: "email" | "phone" | "linkedin";
+  /** Where the record actually came from. Demo pool records can never enter a send queue. */
+  sourcedFrom?: "apollo" | "google_maps" | "demo" | "manual";
+  /** Apollo's own verdict on the address. Absent means no address was ever revealed. */
+  emailStatus?: "verified" | "predicted" | "unavailable" | "not_revealed" | "unknown";
+  apolloPersonId?: string;
 }
 
 export interface ActivityItem {
@@ -236,6 +241,8 @@ export interface AgentReport {
 export type AgentStatus =
   | "live"
   | "no_key"
+  | "no_token"
+  | "token_rejected"
   | "provider_error"
   | "parse_error"
   | "bad_request"
@@ -423,11 +430,12 @@ export type CampaignChannel = "email" | "phone" | "whatsapp" | "linkedin" | "mix
 export type CampaignStepKind = "email" | "call" | "whatsapp" | "linkedin" | "review";
 
 /**
- * Only outcomes a rep can actually observe without an inbox connection.
- * There is deliberately no "opened" or "clicked" — nothing here can see that.
+ * Only outcomes this app can actually establish. There is deliberately no "opened" or
+ * "clicked" — nothing here can see that. "sent" means Gmail accepted the message.
  */
 export type TouchOutcome =
   | "prepared"
+  | "sent"
   | "handed_off"
   | "replied"
   | "no_answer"

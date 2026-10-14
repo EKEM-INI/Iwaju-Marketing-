@@ -3,6 +3,8 @@
 import React, { useEffect, useState } from "react";
 import { getStoredLeads, getStoredActivities } from "@/lib/storage";
 import { Lead, ActivityItem } from "@/types";
+import { OUTBOX_UPDATED_EVENT, outboxCounts } from "@/lib/outbox";
+import { SEND_LEDGER_UPDATED_EVENT, listSentHistory } from "@/lib/send-policy";
 import { MetricCards } from "@/components/dashboard/MetricCards";
 import { PipelineSummary } from "@/components/dashboard/PipelineSummary";
 import { RecentActivity } from "@/components/dashboard/RecentActivity";
@@ -12,20 +14,34 @@ import { Calendar, Layers } from "lucide-react";
 export default function DashboardPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const [outbox, setOutbox] = useState({ sent: 0, awaiting: 0 });
 
   useEffect(() => {
+    const readOutbox = () => {
+      const counts = outboxCounts();
+      setOutbox({
+        sent: listSentHistory(500).length,
+        awaiting: counts.awaiting_review + counts.approved,
+      });
+    };
+
     setLeads(getStoredLeads());
     setActivities(getStoredActivities());
+    readOutbox();
 
     const handleLeadsUpdate = () => setLeads(getStoredLeads());
     const handleActivitiesUpdate = () => setActivities(getStoredActivities());
 
     window.addEventListener("iwaju-leads-updated", handleLeadsUpdate);
     window.addEventListener("iwaju-activities-updated", handleActivitiesUpdate);
+    window.addEventListener(OUTBOX_UPDATED_EVENT, readOutbox);
+    window.addEventListener(SEND_LEDGER_UPDATED_EVENT, readOutbox);
 
     return () => {
       window.removeEventListener("iwaju-leads-updated", handleLeadsUpdate);
       window.removeEventListener("iwaju-activities-updated", handleActivitiesUpdate);
+      window.removeEventListener(OUTBOX_UPDATED_EVENT, readOutbox);
+      window.removeEventListener(SEND_LEDGER_UPDATED_EVENT, readOutbox);
     };
   }, []);
 
@@ -67,7 +83,7 @@ export default function DashboardPage() {
       </div>
 
       {/* KPI Metric Cards */}
-      <MetricCards leads={leads} />
+      <MetricCards leads={leads} outbox={outbox} />
 
       {/* Quick Action Banner */}
       <QuickActionBanner />

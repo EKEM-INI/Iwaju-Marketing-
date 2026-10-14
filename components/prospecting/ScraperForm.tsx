@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 
 interface ScraperFormProps {
-  onStartScrape: (niche: string, location: string, count: number, source: string) => void;
+  onStartScrape: (niche: string, location: string, count: number, source: string, revealEmails: boolean) => void;
   isLoading: boolean;
 }
 
@@ -40,6 +40,7 @@ export function ScraperForm({ onStartScrape, isLoading }: ScraperFormProps) {
   const [location, setLocation] = useState("Lagos");
   const [count, setCount] = useState(6);
   const [source, setSource] = useState("auto");
+  const [revealEmails, setRevealEmails] = useState(false);
   const [apolloStatus, setApolloStatus] = useState<{
     configured: boolean;
     healthy: boolean;
@@ -60,7 +61,7 @@ export function ScraperForm({ onStartScrape, isLoading }: ScraperFormProps) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!niche.trim() || !location.trim()) return;
-    onStartScrape(niche.trim(), location.trim(), count, source);
+    onStartScrape(niche.trim(), location.trim(), count, source, revealEmails);
   };
 
   return (
@@ -202,7 +203,21 @@ export function ScraperForm({ onStartScrape, isLoading }: ScraperFormProps) {
         </div>
       </div>
 
-      <div className="flex justify-end pt-2">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 pt-2">
+        <label className="flex items-start gap-2 cursor-pointer flex-1">
+          <input
+            type="checkbox"
+            checked={revealEmails}
+            onChange={(e) => setRevealEmails(e.target.checked)}
+            className="mt-0.5 accent-emerald-500"
+          />
+          <span className="text-[11px] text-zinc-400 leading-relaxed">
+            <span className="text-zinc-200 font-medium">Reveal contact mailboxes.</span> Apollo returns companies and
+            people free of charge; a person&apos;s email address costs 1–9 Apollo credits per contact and is only
+            written when Apollo genuinely holds one. Leave this off to browse without spending, on to get records the
+            Outbox can actually mail.
+          </span>
+        </label>
         <button
           type="submit"
           disabled={isLoading}

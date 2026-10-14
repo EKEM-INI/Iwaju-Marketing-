@@ -77,6 +77,11 @@ export function toLead(input: any): Lead | null {
     createdAt: TEXT(input.createdAt, 40) || new Date().toISOString(),
     lastContactedAt: input.lastContactedAt ? TEXT(input.lastContactedAt, 40) : undefined,
     contactMethod: ["email", "phone", "linkedin"].includes(input.contactMethod) ? input.contactMethod : undefined,
+    sourcedFrom: ["apollo", "google_maps", "demo", "manual"].includes(input.sourcedFrom) ? input.sourcedFrom : undefined,
+    emailStatus: ["verified", "predicted", "unavailable", "not_revealed", "unknown"].includes(input.emailStatus)
+      ? input.emailStatus
+      : undefined,
+    apolloPersonId: input.apolloPersonId ? TEXT(input.apolloPersonId, 64) : undefined,
   };
 }
 

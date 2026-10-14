@@ -13,10 +13,12 @@ import { formatCurrency } from "@/lib/utils";
 
 interface MetricCardsProps {
   leads: Lead[];
+  outbox?: { sent: number; awaiting: number };
 }
 
-export function MetricCards({ leads }: MetricCardsProps) {
+export function MetricCards({ leads, outbox = { sent: 0, awaiting: 0 } }: MetricCardsProps) {
   const totalLeads = leads.length;
+  const apolloSourced = leads.filter((l) => l.sourcedFrom === "apollo").length;
   const contactedLeads = leads.filter((l) => l.stage === "contacted").length;
   const meetingsBooked = leads.filter((l) => l.stage === "meeting").length;
   const closedLeads = leads.filter((l) => l.stage === "closed").length;
@@ -33,13 +35,13 @@ export function MetricCards({ leads }: MetricCardsProps) {
     {
       title: "Total Discovered Leads",
       value: totalLeads.toString(),
-      change: "+28% discovery velocity",
+      change: `${apolloSourced} carrying a real Apollo-sourced record`,
       icon: Users,
     },
     {
       title: "Active Sequences",
       value: contactedLeads.toString(),
-      change: `${contactedLeads} personalized in-flight`,
+      change: `${outbox.sent} sent via Gmail · ${outbox.awaiting} awaiting approval`,
       icon: Send,
     },
     {
