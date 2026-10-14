@@ -36,13 +36,13 @@ export function AutonomousRunPanel({ defaultNiche, defaultLocation }: Props) {
   const [niche, setNiche] = useState(defaultNiche);
   const [location, setLocation] = useState(defaultLocation);
   const [count, setCount] = useState(8);
-  const [revealEmails, setRevealEmails] = useState(false);
+  const [revealEmails, setRevealEmails] = useState(true);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [campaignId, setCampaignId] = useState("");
   const [senderCompany, setSenderCompany] = useState("Iwaju Marketing");
   const [policy, setPolicy] = useState<SendPolicy>(loadSendPolicy());
   const [connection, setConnection] = useState<GmailConnection | null>(null);
-  const [apolloReady, setApolloReady] = useState<boolean | null>(null);
+  const [apollo, setApollo] = useState<{ ready: boolean; message: string; servedBy: string } | null>(null);
   const [running, setRunning] = useState(false);
   const [log, setLog] = useState<string[]>([]);
   const [summary, setSummary] = useState<AutonomousRunSummary | null>(null);
@@ -68,13 +68,20 @@ export function AutonomousRunPanel({ defaultNiche, defaultLocation }: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/prospecting/status")
+    fetch("/api/prospecting/status", { cache: "no-store" })
       .then((res) => res.json())
       .then((data) => {
-        if (!cancelled) setApolloReady(Boolean(data?.apollo?.healthy ?? data?.apollo?.configured));
+        if (cancelled) return;
+        setApollo({
+          ready: Boolean(data?.apollo?.healthy),
+          message: String(data?.apollo?.message || "Apollo did not report a status."),
+          servedBy: String(data?.servedBy || "unknown host"),
+        });
       })
       .catch(() => {
-        if (!cancelled) setApolloReady(false);
+        if (!cancelled) {
+          setApollo({ ready: false, message: "The status endpoint did not answer.", servedBy: "unknown host" });
+        }
       });
     return () => {
       cancelled = true;
@@ -155,14 +162,14 @@ export function AutonomousRunPanel({ defaultNiche, defaultLocation }: Props) {
         </div>
         <span
           className={`text-[10px] font-mono px-2 py-1 rounded border whitespace-nowrap ${
-            apolloReady === null
+            apollo === null
               ? "border-[#27272a] text-zinc-500"
-              : apolloReady
+              : apollo.ready
                 ? "border-emerald-500/30 bg-emerald-950/40 text-emerald-400"
                 : "border-amber-500/30 bg-amber-950/40 text-amber-400"
           }`}
         >
-          {apolloReady === null ? "CHECKING APOLLO…" : apolloReady ? "APOLLO KEY LIVE" : "NO APOLLO KEY"}
+          {apollo === null ? "CHECKING APOLLO…" : apollo.ready ? "APOLLO KEY LIVE" : "APOLLO WILL NOT SOURCE"}
         </span>
       </div>
 
@@ -222,9 +229,10 @@ export function AutonomousRunPanel({ defaultNiche, defaultLocation }: Props) {
             className="mt-0.5 accent-emerald-500"
           />
           <span className="text-zinc-400 max-w-md leading-relaxed">
-            <span className="text-zinc-200 font-medium">Reveal mailboxes.</span> Without it Apollo returns companies
-            and people with no address, so nothing is mailable. With it Apollo spends credits per person (1–9 each) and
-            only returns an address when it genuinely holds one.
+            <span className="text-zinc-200 font-medium">Reveal mailboxes and direct lines.</span> Whatever Apollo&apos;s
+            search already releases costs nothing. Anything it withholds is purchased at 1–9 credits per person, phones
+            billed on top, and only returns a value Apollo genuinely holds. Off means most records arrive with no
+            address and nothing is mailable.
           </span>
         </label>
         <div className="sm:ml-auto">
@@ -272,11 +280,18 @@ export function AutonomousRunPanel({ defaultNiche, defaultLocation }: Props) {
         </div>
       </div>
 
-      {apolloReady === false && (
-        <p className="text-[11px] text-amber-400 leading-relaxed">
-          Apollo is not answering with a key on this deployment, so sourcing will return nothing and the run will stop
-          at the first step. Set <span className="font-mono">APOLLO_API_KEY</span> and redeploy to source live accounts.
-        </p>
+      {apollo && !apollo.ready && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-[11px] text-amber-300 leading-relaxed space-y-1">
+          <p className="font-semibold text-amber-200">
+            Sourcing will fail at step one: Apollo is not live on this build.
+          </p>
+          <p>{apollo.message}</p>
+          <p className="text-[10px] text-amber-400/80">
+            Answered by <span className="font-mono">{apollo.servedBy}</span>. A key added to Vercel only reaches the
+            site after a redeploy; on this machine it has to be in <span className="font-mono">.env.local</span> with
+            the dev server restarted.
+          </p>
+        </div>
       )}
       {campaigns.length === 0 && (
         <p className="text-[11px] text-amber-400 leading-relaxed">
@@ -336,10 +351,11 @@ export function AutonomousRunPanel({ defaultNiche, defaultLocation }: Props) {
               </div>
             ))}
           </div>
-          {summary.addressRevealed > 0 && (
+          {summary.sourced > 0 && (
             <p className="text-[11px] text-zinc-400">
-              {summary.addressRevealed} of the {summary.sourced} sourced record(s) carry a real mailbox; the rest have no
-              address and cannot be mailed.
+              {summary.addressRevealed} of the {summary.sourced} sourced record(s) carry a mailbox and{" "}
+              {summary.withPhone} carry a direct line. Anything without an address came back that way from Apollo and
+              was left blank rather than guessed.
             </p>
           )}
           {summary.notes.length > 0 && (

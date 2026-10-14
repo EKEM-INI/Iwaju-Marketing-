@@ -35,6 +35,7 @@ export interface AutonomousRunSummary {
   added: number;
   merged: number;
   addressRevealed: number;
+  withPhone: number;
   qualified: number;
   needsReview: number;
   disqualified: number;
@@ -59,6 +60,7 @@ function emptySummary(mode: SendMode): AutonomousRunSummary {
     added: 0,
     merged: 0,
     addressRevealed: 0,
+    withPhone: 0,
     qualified: 0,
     needsReview: 0,
     disqualified: 0,
@@ -107,8 +109,10 @@ async function sourceLeads(options: RunOptions, log: Logger): Promise<{ leads: L
   const reveal = data.reveal || {};
   const note = String(data.notice || "");
   log(`[SOURCE] ${String(data.provider)} returned ${leads.length} account(s). ${note}`);
-  if (reveal.attempted) {
-    log(`[REVEAL] ${reveal.revealed} of ${reveal.attempted} contact(s) came back with a real mailbox. ${String(reveal.note || "")}`);
+  if (reveal.attempted || reveal.alreadyReleased) {
+    log(
+      `[REVEAL] Purchased reveal ran for ${reveal.attempted} contact(s): ${reveal.revealed} came back with a mailbox, ${reveal.phones || 0} direct line(s) returned. Apollo already released ${reveal.alreadyReleased} address(es) for free in the search. ${String(reveal.note || "")}`
+    );
   }
   const warnings = Array.isArray(data.warnings) ? data.warnings : [];
   warnings.forEach((w: string) => log(`[WARN] ${w}`));
@@ -221,6 +225,7 @@ export async function runAutonomousPipeline(options: RunOptions, rawLog: Logger)
   summary.added = added;
   summary.merged = merged;
   summary.addressRevealed = fresh.filter((l) => l.email && l.emailStatus !== "unavailable").length;
+  summary.withPhone = fresh.filter((l) => String(l.phone || "").trim().length > 0).length;
   log(`[CRM] ${added} new account(s) written to the pipeline, ${merged} already on file were refreshed.`);
 
   // 2. Qualify

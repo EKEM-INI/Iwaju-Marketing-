@@ -4,7 +4,7 @@ import { generateMockLeads } from "@/lib/mock-scraper";
 import { scoreAccount, DEFAULT_PROFILE, DEFAULT_WEIGHTS } from "@/lib/icp";
 import {
   apolloConfigured,
-  revealPersonEmail,
+  revealPerson,
   searchOrganizations,
   searchPeople,
   type ApolloOrganization,
@@ -97,15 +97,27 @@ function buildLead(input: {
   person: ApolloPerson | null;
   email: string;
   emailStatus: Lead["emailStatus"];
+  emailOrigin: "revealed" | "already_in_search" | "none";
+  phones: string[];
   niche: string;
   location: string;
 }): Lead {
-  const { org, person, email, emailStatus } = input;
+  const { org, person, email, emailStatus, emailOrigin, phones } = input;
+  const phone = phones[0] || org.phone || "";
   const missing: string[] = [];
   if (!email) missing.push("no email address");
+  if (!phone) missing.push("no phone");
   if (!org.website) missing.push("no website");
   if (org.employees === null) missing.push("no headcount");
   if (!person) missing.push("no named decision-maker");
+
+  const emailLine = !email
+    ? "• Email: none returned — people/match was not run, or Apollo holds no address for this person."
+    : `• Email: ${email} (${emailStatus}) — ${
+        emailOrigin === "revealed"
+          ? "purchased with Apollo credits on this run"
+          : "already released by Apollo's people search for this account"
+      }.`;
 
   const draft: Lead = {
     id: `apollo-${org.id || org.domain || org.name}-${person?.id || "org"}`,
@@ -113,7 +125,7 @@ function buildLead(input: {
     title: person?.title?.trim() || "Not recorded by Apollo",
     company: org.name,
     email,
-    phone: "",
+    phone,
     website: org.website,
     niche: org.industry || input.niche,
     location: org.address || `${org.city}, ${org.state}`.replace(/,\s*$/, ""),
@@ -125,13 +137,28 @@ function buildLead(input: {
       "APOLLO SOURCED RECORD — fields below are exactly what Apollo returned.",
       `• Company: ${org.name}${org.industry ? ` (${org.industry})` : ""}`,
       `• Domain: ${org.domain || "not returned"}`,
+      `• Website: ${org.website || "not returned"}`,
       `• Address: ${org.address || "not returned"}`,
-      `• Headcount: ${org.employees === null ? "not returned" : org.employees}`,
+      `• Headcount: ${
+        org.employees === null
+          ? org.employeesLabel || "not returned"
+          : `${org.employees}${org.employeesLabel ? ` (${org.employeesLabel})` : ""}`
+      }`,
+      org.revenue ? `• Revenue: ${org.revenue}` : "",
+      org.stage ? `• Company stage: ${org.stage}` : "",
+      org.keywords.length ? `• Apollo industry tags: ${org.keywords.join(", ")}` : "",
+      org.description ? `• About: ${org.description}` : "",
       `• LinkedIn: ${org.linkedin || "not returned"}`,
+      `• Phone: ${phone ? `${phone}${phones.length > 1 ? ` (+${phones.length - 1} more on record)` : ""}` : "not returned"}`,
       person
-        ? `• Person: ${person.name || "name withheld"}, ${person.title || "title not returned"}${person.linkedin ? ` (${person.linkedin})` : ""}`
+        ? `• Person: ${person.name || "name withheld"}, ${person.title || "title not returned"}${
+            person.linkedin ? ` — ${person.linkedin}` : ""
+          }`
         : "• Person: Apollo returned no matching decision-maker for this company.",
-      `• Email: ${email ? `${email} (${emailStatus})` : "not revealed — people/match was not run or holds no address"}`,
+      emailLine,
+      phones.length
+        ? `• Direct lines from Apollo: ${phones.join(", ")}`
+        : "• Direct lines: none released. Apollo bills phone numbers separately from addresses.",
       "• Deal value: not recorded. Nobody has talked commercial terms yet.",
       missing.length ? `• Missing: ${missing.join(", ")}.` : "",
     ]
@@ -170,7 +197,15 @@ export async function POST(req: NextRequest) {
   let leads: Lead[] = [];
   let providerUsed = "";
   let providerNotice = "";
-  const revealReport = { requested: Boolean(revealEmails), attempted: 0, revealed: 0, note: "" };
+  const revealReport = {
+    requested: Boolean(revealEmails),
+    attempted: 0,
+    revealed: 0,
+    phones: 0,
+    alreadyReleased: 0,
+    held: 0,
+    note: "",
+  };
 
   if (apolloConfigured() && (source === "apollo" || source === "auto")) {
     const orgAnswer = await searchOrganizations({
@@ -192,7 +227,7 @@ export async function POST(req: NextRequest) {
 
       if (chosen.length > 0) {
         providerUsed = "Apollo.io Live Database";
-        providerNotice = `Matched ${chosen.length} companies via Apollo organization search. People were pulled from Apollo's people search, which returns no addresses by itself.`;
+        providerNotice = `Matched ${chosen.length} companies via Apollo organization search, then Apollo's people search for the named contacts at each.`;
 
         const domains = chosen.map((o) => o.domain).filter(Boolean);
         const peopleByDomain = new Map<string, ApolloPerson>();
@@ -211,35 +246,66 @@ export async function POST(req: NextRequest) {
               const key = (person.domain || "").toLowerCase();
               if (key && !peopleByDomain.has(key)) peopleByDomain.set(key, person);
             }
+            const unmatched = domains.filter((d) => !peopleByDomain.has(d.toLowerCase())).length;
+            if (unmatched > 0) {
+              warnings.push(
+                `Apollo named no decision-maker at ${unmatched} of ${domains.length} companies, so those rows carry the company only. Nobody was invented to fill the gap.`
+              );
+            }
           }
         }
 
         if (revealEmails) {
           revealReport.note =
-            "Apollo bills credits for each address revealed by people/match. Charges apply only where Apollo holds an address.";
+            "Apollo bills credits for each contact revealed by people/match, with phone numbers billed on top. Charges apply only where Apollo holds the value.";
           for (const org of chosen) {
             const key = (org.domain || "").toLowerCase();
             const person = peopleByDomain.get(key);
             if (!person) continue;
+
+            // Apollo's people search already releases the address for some accounts; paying to
+            // reveal the same person again would spend credits to get what we already hold.
+            if (person.email && person.phones.length > 0) {
+              revealReport.alreadyReleased += 1;
+              continue;
+            }
+
             revealReport.attempted += 1;
-            const reveal = await revealPersonEmail(person, org.domain);
+            const reveal = await revealPerson(person, org.domain);
             revealsByDomain.set(key, reveal);
-            if (reveal.revealed && reveal.email) revealReport.revealed += 1;
+            if (reveal.email) revealReport.revealed += 1;
+            revealReport.phones += reveal.phones.length;
+            if (reveal.note && !reveal.email && reveal.phones.length === 0) revealReport.held += 1;
           }
         } else {
           revealReport.note =
-            "Email reveal was not requested, so no address was purchased. Every lead below has a blank email and cannot enter a send queue.";
+            "Reveal was switched off, so nothing was purchased. Whatever Apollo's search already released is shown; the rest has a blank email and cannot enter a send queue.";
+          for (const person of peopleByDomain.values()) {
+            if (person.email) revealReport.alreadyReleased += 1;
+          }
         }
 
         leads = chosen.map((org) => {
           const key = (org.domain || "").toLowerCase();
           const person = peopleByDomain.get(key) || null;
           const reveal = revealsByDomain.get(key);
+          const email = reveal?.email || person?.email || "";
+          const phones = [...(reveal?.phones || []), ...(person?.phones || [])].filter(
+            (p, i, all) => all.indexOf(p) === i
+          );
           return buildLead({
             org,
             person,
-            email: reveal?.email || "",
-            emailStatus: reveal ? reveal.emailStatus : person ? "not_revealed" : "unavailable",
+            email,
+            emailStatus: reveal?.email
+              ? reveal.emailStatus
+              : person?.email
+                ? person.emailStatus
+                : person
+                  ? "not_revealed"
+                  : "unavailable",
+            emailOrigin: reveal?.email ? "revealed" : person?.email ? "already_in_search" : "none",
+            phones,
             niche: cleanNiche,
             location: cleanLocation,
           });
@@ -249,7 +315,9 @@ export async function POST(req: NextRequest) {
       }
     }
   } else if (source === "apollo" || source === "auto") {
-    warnings.push("APOLLO_API_KEY is not set in this build, so nothing was sourced live.");
+    warnings.push(
+      "APOLLO_API_KEY is not visible to this build, so nothing was sourced live. A key saved in Vercel environment variables only reaches the site on the next deploy; on localhost it must be in .env.local with the dev server restarted."
+    );
   }
 
   if (leads.length === 0 && (source === "google" || (source === "auto" && leads.length === 0))) {
@@ -317,8 +385,16 @@ export async function POST(req: NextRequest) {
     leads = generateMockLeads(cleanNiche, cleanLocation, Math.min(wanted, 8));
   }
 
-  if (!revealEmails && leads.some((l) => l.sourcedFrom === "apollo")) {
-    warnings.push("No Apollo addresses were revealed, so no Apollo lead here is sendable yet.");
+  const apolloLeads = leads.filter((l) => l.sourcedFrom === "apollo");
+  const sendable = apolloLeads.filter((l) => l.email).length;
+  if (apolloLeads.length > 0 && sendable === 0) {
+    warnings.push(
+      revealEmails
+        ? "The reveal ran and Apollo gave back no mailbox for anyone on this list. The companies and people are real; Apollo simply does not hold addresses for them, so none of these can be mailed."
+        : "No Apollo addresses are on these records, so none of them can be mailed. Switch on the reveal to purchase them."
+    );
+  } else if (sendable > 0 && sendable < apolloLeads.length) {
+    warnings.push(`${sendable} of ${apolloLeads.length} Apollo records carry a mailbox. The rest have a company and a person but no address on record.`);
   }
 
   return NextResponse.json({
@@ -328,6 +404,7 @@ export async function POST(req: NextRequest) {
     warnings,
     count: leads.length,
     reveal: revealReport,
+    servedBy: req.headers.get("host") || "unknown host",
     leads,
   });
 }
@@ -338,6 +415,6 @@ export async function GET() {
     apolloConfigured: apolloConfigured(),
     mapsConfigured: Boolean(process.env.GOOGLE_MAPS_API_KEY),
     shape: "POST { niche, location, count, source, revealEmails, allowDemo, titles }",
-    note: "revealEmails spends Apollo credits per person. Without it, addresses stay blank and the lead cannot be mailed.",
+    note: "revealEmails spends Apollo credits per person: the mailbox, and a direct line where Apollo holds one. Without it only what Apollo's search already releases comes back.",
   });
 }

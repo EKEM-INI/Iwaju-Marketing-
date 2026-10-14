@@ -10,6 +10,7 @@ import {
   ShieldCheck,
   Layers,
   CheckCircle2,
+  AlertTriangle,
 } from "lucide-react";
 
 interface ScraperFormProps {
@@ -40,20 +41,23 @@ export function ScraperForm({ onStartScrape, isLoading }: ScraperFormProps) {
   const [location, setLocation] = useState("Lagos");
   const [count, setCount] = useState(6);
   const [source, setSource] = useState("auto");
-  const [revealEmails, setRevealEmails] = useState(false);
+  const [revealEmails, setRevealEmails] = useState(true);
   const [apolloStatus, setApolloStatus] = useState<{
     configured: boolean;
     healthy: boolean;
+    message: string;
     maskedKey: string | null;
   } | null>(null);
+  const [servedBy, setServedBy] = useState("");
 
   useEffect(() => {
-    fetch("/api/prospecting/status")
+    fetch("/api/prospecting/status", { cache: "no-store" })
       .then((res) => res.json())
       .then((data) => {
         if (data.apollo) {
           setApolloStatus(data.apollo);
         }
+        if (typeof data?.servedBy === "string") setServedBy(data.servedBy);
       })
       .catch((err) => console.error("Failed to fetch API status", err));
   }, []);
@@ -77,11 +81,34 @@ export function ScraperForm({ onStartScrape, isLoading }: ScraperFormProps) {
               <span>Target Acquisition Parameters</span>
             </h2>
 
-            {/* Live Apollo Integration Badge */}
-            {apolloStatus?.configured && (
-              <span className="inline-flex items-center gap-1 text-[11px] font-mono bg-emerald-500/10 text-emerald-400 px-2.5 py-0.5 rounded-full border border-emerald-500/30">
-                <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                <span>Apollo Connected ({apolloStatus.maskedKey})</span>
+            {/* Live Apollo Integration Badge — shows the failure state too, on purpose */}
+            {apolloStatus === null ? (
+              <span className="inline-flex items-center gap-1 text-[11px] font-mono text-zinc-500 px-2.5 py-0.5 rounded-full border border-zinc-800">
+                <span>Checking Apollo…</span>
+              </span>
+            ) : apolloStatus.healthy || apolloStatus.configured ? (
+              <span
+                className={`inline-flex items-center gap-1 text-[11px] font-mono px-2.5 py-0.5 rounded-full border ${
+                  apolloStatus.healthy
+                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                    : "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                }`}
+              >
+                {apolloStatus.healthy ? (
+                  <CheckCircle2 className="w-3 h-3" />
+                ) : (
+                  <AlertTriangle className="w-3 h-3" />
+                )}
+                <span>
+                  {apolloStatus.healthy
+                    ? `Apollo Connected (${apolloStatus.maskedKey})`
+                    : `Apollo key present but rejected (${apolloStatus.maskedKey})`}
+                </span>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-[11px] font-mono bg-amber-500/10 text-amber-400 px-2.5 py-0.5 rounded-full border border-amber-500/30">
+                <AlertTriangle className="w-3 h-3" />
+                <span>No Apollo key in this build</span>
               </span>
             )}
           </div>
@@ -100,7 +127,7 @@ export function ScraperForm({ onStartScrape, isLoading }: ScraperFormProps) {
               className="bg-zinc-950 border border-zinc-800 text-zinc-200 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-emerald-500 font-mono"
               disabled={isLoading}
             >
-              <option value="auto">Auto-Cascade (Apollo + Radar)</option>
+              <option value="auto">Auto (Apollo first, then Google Places)</option>
               <option value="apollo">Apollo.io Direct</option>
               <option value="google">Google Maps (Places)</option>
             </select>
@@ -124,6 +151,25 @@ export function ScraperForm({ onStartScrape, isLoading }: ScraperFormProps) {
           </div>
         </div>
       </div>
+
+      {apolloStatus && !apolloStatus.healthy && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-300 leading-relaxed space-y-1">
+          <p className="font-semibold text-amber-200">Apollo cannot source leads on this build right now.</p>
+          <p>{apolloStatus.message}</p>
+          {source !== "apollo" && (
+            <p>
+              Choosing <span className="font-mono">Apollo.io Direct</span> will still fail until the key works —
+              it changes which engine is asked, not whether the engine has credentials.
+            </p>
+          )}
+          {servedBy && (
+            <p className="text-[11px] text-amber-400/80">
+              Answered by <span className="font-mono">{servedBy}</span> — that is the build whose environment this
+              screen is talking to.
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Niche Input */}
@@ -212,10 +258,11 @@ export function ScraperForm({ onStartScrape, isLoading }: ScraperFormProps) {
             className="mt-0.5 accent-emerald-500"
           />
           <span className="text-[11px] text-zinc-400 leading-relaxed">
-            <span className="text-zinc-200 font-medium">Reveal contact mailboxes.</span> Apollo returns companies and
-            people free of charge; a person&apos;s email address costs 1–9 Apollo credits per contact and is only
-            written when Apollo genuinely holds one. Leave this off to browse without spending, on to get records the
-            Outbox can actually mail.
+            <span className="text-zinc-200 font-medium">Reveal mailboxes and direct lines.</span> Apollo returns
+            companies and people free of charge; where its search already releases an address, that comes back without
+            cost. Anything it withholds is purchased here at 1–9 Apollo credits per contact, with phone numbers billed
+            on top — and a value is only written when Apollo genuinely holds one. Switch this off to browse without
+            spending; on gives records the Outbox can actually mail.
           </span>
         </label>
         <button
