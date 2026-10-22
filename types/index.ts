@@ -20,7 +20,7 @@ export interface Lead {
   lastContactedAt?: string;
   contactMethod?: "email" | "phone" | "linkedin";
   /** Where the record actually came from. Demo pool records can never enter a send queue. */
-  sourcedFrom?: "apollo" | "google_maps" | "demo" | "manual";
+  sourcedFrom?: "apollo" | "google_maps" | "gemini" | "demo" | "manual";
   /** Apollo's own verdict on the address. Absent means no address was ever revealed. */
   emailStatus?: "verified" | "predicted" | "unavailable" | "not_revealed" | "unknown";
   apolloPersonId?: string;

@@ -27,8 +27,11 @@ const SENSITIVE_FIELDS = new Set(["directMobile", "personalMobile", "phone", "wh
 const TONES = ["direct", "consultative", "peer_to_peer", "short_question"] as const;
 
 export async function GET() {
+  const hasGemini = Boolean(getGeminiKey());
+  const hasChatGpt = Boolean(getChatGptKey());
   return NextResponse.json({
     status: "ok",
+    hasApiKey: hasGemini || hasChatGpt,
     engine: "Fact-Grounded Outreach Copilot",
     writers: [
       { provider: "chatgpt", envKey: "CHAT_GPT_API", model: getChatGptModel(), configured: Boolean(getChatGptKey()) },
@@ -163,7 +166,7 @@ Return JSON:
 
   const result = await writeWithFallback<any>(systemPrompt, userPrompt, 0.4);
 
-  if (!result.ok) {
+  if (!result || !result.ok) {
     return NextResponse.json({
       success: false,
       status: result.status,
@@ -201,6 +204,8 @@ Return JSON:
     modelProvider: result.modelProvider,
     modelName: result.modelName,
     isLiveModel: true,
+    isLiveGemini: result.modelProvider === "gemini",
+    isLiveChatGPT: result.modelProvider === "chatgpt",
     subject: data.subject || "",
     altSubjects: Array.isArray(data.altSubjects) ? data.altSubjects : [],
     body: bodyText,
