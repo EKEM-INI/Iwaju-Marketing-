@@ -55,7 +55,7 @@ export default function PipelinePage() {
     });
     setLeads(reordered);
     saveLeads(reordered);
-    showToast("ChatGPT Brain Applied", "Pipeline re-sorted by commercial deal velocity.", "success");
+    showToast("AI Brain Applied", "Pipeline re-sorted by commercial deal velocity.", "success");
     setIsAiSortingOpen(false);
   };
   const { showToast } = useToast();
@@ -129,7 +129,7 @@ export default function PipelinePage() {
             className="px-3.5 py-2 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 border border-emerald-500/40 text-white text-xs font-semibold flex items-center gap-2 cursor-pointer transition-colors shadow-lg"
           >
             <Sparkles className="w-4 h-4 text-emerald-400" />
-            <span>{isAiSortingLoading ? "ChatGPT Analyzing..." : "Sort with ChatGPT Brain"}</span>
+            <span>{isAiSortingLoading ? "AI Brain Analyzing..." : "Sort with AI Brain"}</span>
           </button>
           <div className="px-3.5 py-2 rounded-xl bg-zinc-900/90 border border-zinc-800 text-right">
             <span className="text-[10px] uppercase font-bold text-zinc-400 block">
@@ -207,9 +207,9 @@ export default function PipelinePage() {
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-bold text-white">ChatGPT Lead Sorting & Intelligence</h3>
+                    <h3 className="text-sm font-bold text-white">AI Lead Sorting & Intelligence</h3>
                     <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-950/60 text-emerald-400 border border-emerald-500/30">
-                      {aiSortResult?.provider || "No live ChatGPT result"}
+                      {aiSortResult?.provider || "AI Model Ready"}
                     </span>
                   </div>
                   <p className="text-xs text-zinc-400 font-mono mt-0.5">
@@ -230,10 +230,10 @@ export default function PipelinePage() {
                 <div className="py-16 text-center space-y-3 font-mono">
                   <RefreshCw className="w-6 h-6 text-emerald-400 animate-spin mx-auto" />
                   <p className="text-sm text-white font-sans font-semibold">
-                    ChatGPT Brain is reviewing and ranking your leads...
+                    AI Brain is reviewing and ranking your leads...
                   </p>
                   <p className="text-xs text-zinc-500">
-                    Evaluating deal probability, verified contacts, and urgent pain points.
+                    Evaluating deal probability, verified contacts, and urgent pain points with {aiSortResult?.provider || "ChatGPT / Gemini"}.
                   </p>
                 </div>
               ) : aiSortResult ? (

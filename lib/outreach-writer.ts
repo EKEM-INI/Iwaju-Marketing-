@@ -25,7 +25,8 @@ export function hasAnyWriterKey(): boolean {
 export async function writeWithFallback<T>(
   systemPrompt: string,
   userPrompt: string,
-  temperature = 0.4
+  temperature = 0.4,
+  options: { maxOutputTokens?: number } = {}
 ): Promise<WriterAnswer<T>> {
   const attempted: ModelProvider[] = [];
   const failures: string[] = [];
@@ -39,7 +40,11 @@ export async function writeWithFallback<T>(
 
   if (getGeminiKey()) {
     attempted.push("gemini");
-    const gemini = await requestGeminiJson<T>(systemPrompt, userPrompt, { temperature, grounding: false });
+    const gemini = await requestGeminiJson<T>(systemPrompt, userPrompt, {
+      temperature,
+      maxOutputTokens: options.maxOutputTokens || 4000,
+      grounding: false,
+    });
     if (gemini.ok) return { ok: true, data: gemini.data, modelProvider: "gemini", modelName: gemini.model };
     failures.push(`Gemini: ${gemini.message}`);
   }

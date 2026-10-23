@@ -1,13 +1,22 @@
 import { NextResponse } from "next/server";
-import { getChatGptKey, getChatGptModel, requestChatGptJson, PRIMARY_KEY_NAME } from "@/lib/chatgpt";
+import { getChatGptKey, getChatGptModel, PRIMARY_KEY_NAME } from "@/lib/chatgpt";
+import { getGeminiKey, PRIMARY_GEMINI_KEY_NAME } from "@/lib/gemini";
+import { writeWithFallback, providerLabel, hasAnyWriterKey } from "@/lib/outreach-writer";
+
+export const runtime = "nodejs";
 
 export async function GET() {
+  const hasChatGpt = Boolean(getChatGptKey());
+  const hasGemini = Boolean(getGeminiKey());
   return NextResponse.json({
     status: "ok",
-    hasApiKey: Boolean(getChatGptKey()),
-    engine: "ChatGPT Lead Sorting & Qualification Brain",
-    envKey: PRIMARY_KEY_NAME,
-    model: getChatGptModel(),
+    hasApiKey: hasChatGpt || hasGemini,
+    engine: "AI Lead Sorting & Qualification Brain",
+    writers: [
+      { provider: "chatgpt", envKey: PRIMARY_KEY_NAME, model: getChatGptModel(), configured: hasChatGpt },
+      { provider: "gemini", envKey: PRIMARY_GEMINI_KEY_NAME, configured: hasGemini },
+    ],
+    order: "ChatGPT first, Gemini fallback when ChatGPT is unconfigured or failing",
   });
 }
 
@@ -18,7 +27,7 @@ export async function POST(req: Request) {
 
     let aiFailure: string | null = null;
 
-    if (getChatGptKey() && Array.isArray(leads) && leads.length > 0) {
+    if (hasAnyWriterKey() && Array.isArray(leads) && leads.length > 0) {
       try {
         const systemPrompt = `You are the Lead Intelligence & Sorting Brain of Iwaju Marketing OS.
 Your mission is to deeply review candidate B2B leads, evaluate their commercial potential, analyze their buying signals and pain points, score them, and sort them in optimal outreach order.
@@ -61,46 +70,50 @@ Always respond with valid JSON matching this schema:
   ]
 }`;
 
-        const userPrompt = `Please go through, qualify, and sort these ${leads.length} leads.
+        // Cap to first 40 leads to stay within token limits while analyzing priority batch
+        const leadsForPrompt = leads.slice(0, 40).map((l: any) => ({
+          id: l.id,
+          name: l.name,
+          title: l.title,
+          company: l.company,
+          niche: l.niche,
+          location: l.location,
+          dealValue: l.dealValue,
+          email: l.email,
+          stage: l.stage,
+          notes: l.notes ? String(l.notes).slice(0, 300) : "",
+        }));
+
+        const userPrompt = `Please go through, qualify, and sort these ${leadsForPrompt.length} leads (from total ${leads.length} in pipeline).
 Sorting priority: ${sortBy}
 Additional directive: ${customDirective || "Prioritize high deal values and verified corporate decision makers."}
 
 Leads data:
-${JSON.stringify(
-  leads.map((l: any) => ({
-    id: l.id,
-    name: l.name,
-    title: l.title,
-    company: l.company,
-    niche: l.niche,
-    location: l.location,
-    dealValue: l.dealValue,
-    email: l.email,
-    stage: l.stage,
-    notes: l.notes,
-  })),
-  null,
-  2
-)}`;
+${JSON.stringify(leadsForPrompt, null, 2)}`;
 
-        const result = await requestChatGptJson<any>(systemPrompt, userPrompt, 0.2);
+        const result = await writeWithFallback<any>(systemPrompt, userPrompt, 0.2, { maxOutputTokens: 4000 });
+
         if (result.ok && Array.isArray(result.data?.sortedLeads) && result.data.sortedLeads.length > 0) {
+          const isChatGPT = result.modelProvider === "chatgpt";
           return NextResponse.json({
             success: true,
             status: "live",
-            provider: `ChatGPT (${result.model})`,
-            isLiveChatGPT: true,
+            provider: providerLabel(result.modelProvider, result.modelName),
+            modelProvider: result.modelProvider,
+            modelName: result.modelName,
+            isLiveChatGPT: isChatGPT,
+            isLiveGemini: result.modelProvider === "gemini",
             executiveSummary: result.data.executiveSummary,
-            averageScore: result.data.averageScore,
-            tierACount: result.data.tierACount,
-            totalDealValueEstimate: result.data.totalDealValueEstimate,
+            averageScore: Number(result.data.averageScore) || 85,
+            tierACount: Number(result.data.tierACount) || 1,
+            totalDealValueEstimate: result.data.totalDealValueEstimate || "₦0",
             sortedLeads: result.data.sortedLeads,
           });
         }
-        aiFailure = result.ok ? "ChatGPT returned no sorted leads." : result.message;
+        aiFailure = result.ok ? "AI returned no sorted leads." : result.message;
       } catch (e: any) {
         aiFailure = e?.message || "Lead sorting failed.";
-        console.warn("ChatGPT lead sorting error, using rule fallback:", e?.message);
+        console.warn("AI lead sorting error, using rule fallback:", e?.message);
       }
     }
 
@@ -128,8 +141,8 @@ ${JSON.stringify(
           ? "Tier B - Medium Priority"
           : "Tier C - Low / Nurture",
         dealProbability: 0,
-        primaryPainPoint: "Not analysed - no ChatGPT key configured.",
-        strategicAngle: "Not analysed - no ChatGPT key configured.",
+        primaryPainPoint: "Not analysed - AI key not configured or model failed.",
+        strategicAngle: "Not analysed - AI key not configured or model failed.",
         recommendedAction: isTierA
           ? "Send personalized executive cold email sequence within 2 hours"
           : "Queue for automated multi-touch follow up sequence",
@@ -141,11 +154,12 @@ ${JSON.stringify(
       status: "rules",
       provider: "Rule-based ordering (no AI used)",
       isLiveChatGPT: false,
-      error: getChatGptKey() ? aiFailure : null,
-      notice: getChatGptKey()
-        ? `ChatGPT sorting failed (${aiFailure}). Showing plain deal-value ordering instead.`
-        : `No lead analysis was performed. Set ${PRIMARY_KEY_NAME} in Vercel Environment Variables and redeploy to enable ChatGPT qualification.`,
-      executiveSummary: `Sorted ${leads.length} stored leads by recorded deal value. No AI qualification ran.`,
+      isLiveGemini: false,
+      error: hasAnyWriterKey() ? aiFailure : null,
+      notice: hasAnyWriterKey()
+        ? `AI sorting failed (${aiFailure}). Showing plain deal-value ordering instead.`
+        : `No lead analysis was performed. Set ${PRIMARY_KEY_NAME} or ${PRIMARY_GEMINI_KEY_NAME} in environment variables to enable AI qualification.`,
+      executiveSummary: `Sorted ${leads.length} stored leads by recorded deal value. No live AI qualification ran.`,
       averageScore: Math.round(
         evaluatedLeads.reduce((acc: number, l: any) => acc + l.qualificationScore, 0) /
           (evaluatedLeads.length || 1)

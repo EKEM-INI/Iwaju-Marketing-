@@ -143,6 +143,8 @@ export interface EvaluatedLead {
 export interface AISortResult {
   provider: string;
   isLiveChatGPT: boolean;
+  isLiveGemini?: boolean;
+  modelProvider?: "chatgpt" | "gemini";
   executiveSummary: string;
   averageScore: number;
   tierACount: number;
