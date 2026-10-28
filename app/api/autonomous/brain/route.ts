@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
-import { requestChatGptJson, getChatGptModel, missingKeyMessage, PRIMARY_KEY_NAME } from "@/lib/chatgpt";
+import { getChatGptKey, getChatGptModel, PRIMARY_KEY_NAME } from "@/lib/chatgpt";
+import { getGeminiKey, PRIMARY_GEMINI_KEY_NAME } from "@/lib/gemini";
+import { writeWithFallback, providerLabel, hasAnyWriterKey } from "@/lib/outreach-writer";
 import type { AgentReport, LeadVerdict, LeadVerdictStatus } from "@/types";
+
+export const runtime = "nodejs";
 
 interface RawVerdict {
   leadId?: unknown;
@@ -41,11 +45,18 @@ function normaliseVerdict(raw: RawVerdict, knownLeadIds: Set<string>): LeadVerdi
 }
 
 export async function GET() {
+  const hasChatGpt = Boolean(getChatGptKey());
+  const hasGemini = Boolean(getGeminiKey());
   return NextResponse.json({
     status: "ok",
-    role: "Lead qualification, verification, email copy and reporting. Does not source leads.",
-    envKey: PRIMARY_KEY_NAME,
-    model: getChatGptModel(),
+    role: "Lead qualification, verification, and audit reporting. Does not source leads.",
+    hasApiKey: hasChatGpt || hasGemini,
+    engine: "Autonomous Lead Audit Brain",
+    writers: [
+      { provider: "chatgpt", envKey: PRIMARY_KEY_NAME, model: getChatGptModel(), configured: hasChatGpt },
+      { provider: "gemini", envKey: PRIMARY_GEMINI_KEY_NAME, configured: hasGemini },
+    ],
+    order: "ChatGPT first, Gemini fallback when ChatGPT is unconfigured or failing",
     ready: true,
   });
 }
@@ -63,7 +74,17 @@ export async function POST(req: Request) {
     return NextResponse.json({
       success: false,
       status: "no_leads",
-      error: "No leads were supplied to qualify. Run an Apollo prospecting search first, then qualify the records it stored.",
+      error: "No leads were supplied to qualify. Run a prospecting search first, then qualify the records it stored.",
+      verdicts: [],
+      report: null,
+    });
+  }
+
+  if (!hasAnyWriterKey()) {
+    return NextResponse.json({
+      success: false,
+      status: "no_key",
+      error: `No AI key is configured. Add ${PRIMARY_KEY_NAME} or ${PRIMARY_GEMINI_KEY_NAME} to your environment variables to enable autonomous auditing.`,
       verdicts: [],
       report: null,
     });
@@ -117,40 +138,44 @@ Return JSON only, matching:
   }
 }`;
 
+  // Limit batch size to 30 to avoid token cutoff while providing deep analysis
+  const leadsForPrompt = leads.slice(0, 30).map((l: any) => ({
+    id: l.id,
+    company: l.company,
+    name: l.name,
+    title: l.title,
+    email: l.email,
+    phone: l.phone,
+    website: l.website,
+    niche: l.niche,
+    location: l.location,
+    stage: l.stage,
+    dealValue: l.dealValue,
+    currency: l.currency,
+    score: l.score,
+    tags: l.tags,
+    notes: l.notes ? String(l.notes).slice(0, 400) : "",
+    createdAt: l.createdAt,
+  }));
+
   const userPrompt = `Target this pass was run for: niche "${niche}" in "${city}".
 
-Qualify and audit these ${leads.length} stored leads, then write the report:
+Qualify and audit these ${leadsForPrompt.length} stored leads (out of ${leads.length} total), then write the report:
 
-${JSON.stringify(
-    leads.map((l: any) => ({
-      id: l.id,
-      company: l.company,
-      name: l.name,
-      title: l.title,
-      email: l.email,
-      phone: l.phone,
-      website: l.website,
-      niche: l.niche,
-      location: l.location,
-      stage: l.stage,
-      dealValue: l.dealValue,
-      currency: l.currency,
-      score: l.score,
-      tags: l.tags,
-      notes: l.notes,
-      createdAt: l.createdAt,
-    })),
-    null,
-    1
-  )}`;
+${JSON.stringify(leadsForPrompt, null, 1)}`;
 
-  const result = await requestChatGptJson<{ verdicts?: RawVerdict[]; report?: any }>(systemPrompt, userPrompt, 0.2);
+  const result = await writeWithFallback<{ verdicts?: RawVerdict[]; report?: any }>(
+    systemPrompt,
+    userPrompt,
+    0.2,
+    { maxOutputTokens: 4000 }
+  );
 
   if (!result.ok) {
     return NextResponse.json({
       success: false,
       status: result.status,
-      error: result.status === "no_key" ? missingKeyMessage() : result.message,
+      error: result.message,
       verdicts: [],
       report: null,
     });
@@ -164,7 +189,7 @@ ${JSON.stringify(
     return NextResponse.json({
       success: false,
       status: "parse_error",
-      error: "ChatGPT returned no verdicts matching the supplied lead ids.",
+      error: `${providerLabel(result.modelProvider, result.modelName)} returned no verdicts matching the supplied lead ids.`,
       verdicts: [],
       report: null,
     });
@@ -172,11 +197,15 @@ ${JSON.stringify(
 
   const report = buildReport(result.data?.report, verdicts);
 
+  const isChatGPT = result.modelProvider === "chatgpt";
   return NextResponse.json({
     success: true,
     status: "live",
-    provider: `ChatGPT (${result.model})`,
-    isLiveChatGPT: true,
+    provider: providerLabel(result.modelProvider, result.modelName),
+    modelProvider: result.modelProvider,
+    modelName: result.modelName,
+    isLiveChatGPT: isChatGPT,
+    isLiveGemini: result.modelProvider === "gemini",
     verdicts,
     report,
   });

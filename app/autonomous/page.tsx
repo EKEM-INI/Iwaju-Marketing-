@@ -248,7 +248,7 @@ export default function AutonomousPage() {
     }
 
     setBrainProvider(brainData?.provider || "Unknown provider");
-    setIsLiveChatGPT(Boolean(brainData?.isLiveChatGPT));
+    setIsLiveChatGPT(Boolean(brainData?.isLiveChatGPT || brainData?.isLiveGemini));
 
     if (!brainData?.success) {
       finishFailedRun(brainData?.error || "Qualification failed.");
@@ -550,7 +550,9 @@ export default function AutonomousPage() {
       if (data && data.sortedLeads) {
         setAiSortResult(data);
         if (data.provider) setBrainProvider(data.provider);
-        if (typeof data.isLiveChatGPT === "boolean") setIsLiveChatGPT(data.isLiveChatGPT);
+        if (typeof data.isLiveChatGPT === "boolean" || typeof data.isLiveGemini === "boolean") {
+          setIsLiveChatGPT(Boolean(data.isLiveChatGPT || data.isLiveGemini));
+        }
       }
     } catch (err) {
       console.warn("AI sort failed:", err);
@@ -699,7 +701,7 @@ export default function AutonomousPage() {
             className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700 flex items-center gap-1.5 text-xs font-semibold cursor-pointer transition-colors"
           >
             <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-            <span>{isAiSortingLoading ? "Sorting Leads..." : "Sort Leads with ChatGPT"}</span>
+            <span>{isAiSortingLoading ? "Sorting Leads..." : "Sort Leads with AI"}</span>
           </button>
           <div className="px-3 py-1.5 rounded-lg bg-[#121215] border border-[#27272a] flex items-center gap-2">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
