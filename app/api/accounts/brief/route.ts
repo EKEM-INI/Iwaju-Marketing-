@@ -3,7 +3,9 @@ import type { AccountBrief, GroundedFact, ResolvedClaim, SignalScanResult } from
 import type { EvidenceCounts } from "@/lib/icp";
 import { deterministicEnvelope, failEnvelope, jsonEnvelope, okEnvelope, toLead, asStringArray, domainOf } from "@/lib/agents";
 import { nextBestAction } from "@/lib/rules";
-import { getChatGptKey, PRIMARY_KEY_NAME, requestChatGptJson } from "@/lib/chatgpt";
+import { getChatGptKey, PRIMARY_KEY_NAME } from "@/lib/chatgpt";
+import { getGeminiKey, PRIMARY_GEMINI_KEY_NAME } from "@/lib/gemini";
+import { writeWithFallback, providerLabel, hasAnyWriterKey } from "@/lib/outreach-writer";
 import type { ContactResolution } from "@/lib/verification";
 
 export const runtime = "nodejs";
@@ -19,10 +21,17 @@ interface ModelBrief {
 }
 
 export async function GET() {
+  const hasChatGpt = Boolean(getChatGptKey());
+  const hasGemini = Boolean(getGeminiKey());
   return NextResponse.json({
     status: "ok",
     agent: AGENT,
-    provider: getChatGptKey() ? PRIMARY_KEY_NAME : "deterministic",
+    hasApiKey: hasChatGpt || hasGemini,
+    writers: [
+      { provider: "chatgpt", envKey: PRIMARY_KEY_NAME, configured: hasChatGpt },
+      { provider: "gemini", envKey: PRIMARY_GEMINI_KEY_NAME, configured: hasGemini },
+    ],
+    provider: hasChatGpt ? PRIMARY_KEY_NAME : hasGemini ? PRIMARY_GEMINI_KEY_NAME : "deterministic",
     method: "brief assembled from the stored record plus verification evidence; a model only arranges it",
     writesRecords: false,
   });
@@ -128,12 +137,12 @@ export async function POST(req: Request) {
     suggestedNextStep: `${suggestion.action} (${suggestion.effortMinutes} min) — ${suggestion.effect}`,
   };
 
-  if (!getChatGptKey()) {
+  if (!hasAnyWriterKey()) {
     return jsonEnvelope(
       deterministicEnvelope<AccountBrief>(
         AGENT,
         ruleBrief,
-        `Built from the stored record and the verification agents only. Add ${PRIMARY_KEY_NAME} in Vercel to have ChatGPT rewrite the narrative sections — it will still be restricted to the approved facts listed above. Nothing was invented to fill a gap.`
+        `Built from the stored record and the verification agents only. Add ${PRIMARY_KEY_NAME} or ${PRIMARY_GEMINI_KEY_NAME} in Vercel to have an AI writer synthesize the narrative sections — it will still be restricted to the approved facts listed above. Nothing was invented to fill a gap.`
       )
     );
   }
@@ -163,7 +172,7 @@ JSON only:
     1
   );
 
-  const answer = await requestChatGptJson<ModelBrief>(systemPrompt, userPrompt, 0.3);
+  const answer = await writeWithFallback<ModelBrief>(systemPrompt, userPrompt, 0.3);
 
   if (!answer.ok) {
     if (answer.status === "no_key") {
@@ -174,7 +183,7 @@ JSON only:
         AGENT,
         "deterministic",
         ruleBrief,
-        `ChatGPT did not answer (${answer.message}). The brief below is the rule-based version, built only from stored data.`
+        `AI did not answer (${answer.message}). The brief below is the rule-based version, built only from stored data.`
       )
     );
   }
@@ -187,12 +196,14 @@ JSON only:
     callPlan: asStringArray(answer.data?.callPlan, 6).length ? asStringArray(answer.data?.callPlan, 6) : ruleBrief.callPlan,
   };
 
+  const label = providerLabel(answer.modelProvider, answer.modelName);
+
   return jsonEnvelope(
     okEnvelope<AccountBrief>(
       AGENT,
-      "chatgpt",
+      answer.modelProvider,
       merged,
-      `ChatGPT (${answer.model}) arranged the narrative; every line still traces to the record, the verification agents or a cited search result. Snapshot, unproven list and the next step are computed, not written by the model.`
+      `${label} arranged the narrative; every line still traces to the record, the verification agents or a cited search result. Snapshot, unproven list and the next step are computed, not written by the model.`
     )
   );
 }

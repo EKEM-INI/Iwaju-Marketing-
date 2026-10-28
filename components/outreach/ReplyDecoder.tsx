@@ -124,7 +124,12 @@ export function ReplyDecoder({ leads }: Props) {
               : "text-amber-400 border-amber-500/30 bg-amber-500/5"
           }`}
         >
-          {envelope.agent} · {envelope.provider} · {envelope.live ? "ChatGPT answered" : "rules only, no model"}
+          {envelope.agent} · {envelope.provider} ·{" "}
+          {envelope.live
+            ? envelope.provider === "gemini"
+              ? "Google Gemini answered"
+              : "ChatGPT answered"
+            : "rules only, no model"}
           {(envelope.error || envelope.note) && (
             <span className="block text-zinc-300 font-sans mt-0.5">{envelope.error || envelope.note}</span>
           )}

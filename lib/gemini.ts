@@ -2,8 +2,8 @@ const KEY_NAMES = ["GEMINI_API_KEY", "GOOGLE_API_KEY", "NEXT_PUBLIC_GEMINI_API_K
 
 export const PRIMARY_GEMINI_KEY_NAME = "GEMINI_API_KEY";
 
-/** Same model order the chatbox uses, so one key configures both surfaces. */
-const MODELS = ["gemini-3.8-flash", "gemini-flash-latest"];
+/** Same model order the chatbox uses, with lite models for high-demand capacity fallback. */
+const MODELS = ["gemini-3.8-flash", "gemini-flash-latest", "gemini-flash-lite-latest", "gemini-2.5-flash-lite"];
 
 export function getGeminiKey(): string | null {
   for (const name of KEY_NAMES) {
@@ -116,20 +116,26 @@ export async function requestGeminiJson<T>(
   for (const model of modelsToTry()) {
     const endpoint = `${baseUrl()}/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
-    const body: Record<string, any> = {
-      contents: [
-        {
-          role: "user",
-          parts: [{ text: `${systemPrompt}\n\n---\n\n${userPrompt}\n\nReply with JSON only.` }],
+    const makeBody = (useGrounding: boolean) => {
+      const b: Record<string, any> = {
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: `${systemPrompt}\n\n---\n\n${userPrompt}\n\nReply with JSON only.` }],
+          },
+        ],
+        generationConfig: {
+          temperature,
+          maxOutputTokens,
+          responseMimeType: "application/json",
         },
-      ],
-      generationConfig: {
-        temperature,
-        maxOutputTokens,
-        responseMimeType: "application/json",
-      },
+      };
+      if (useGrounding) b.tools = [{ google_search: {} }];
+      return b;
     };
-    if (grounding) body.tools = [{ google_search: {} }];
+
+    let body = makeBody(grounding);
+    let isGrounded = grounding;
 
     let res: Response;
     try {
@@ -143,7 +149,26 @@ export async function requestGeminiJson<T>(
       continue;
     }
 
-    const payload = await res.json().catch(() => null);
+    let payload = await res.json().catch(() => null);
+
+    // If 429 quota exhaustion occurred while Google Search grounding was enabled,
+    // automatically retry without the search tool so the model can still generate an answer.
+    if (!res.ok && isGrounded && (res.status === 429 || payload?.error?.status === "RESOURCE_EXHAUSTED" || String(payload?.error?.message).toLowerCase().includes("quota"))) {
+      isGrounded = false;
+      body = makeBody(false);
+      try {
+        res = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        payload = await res.json().catch(() => null);
+      } catch (retryErr: any) {
+        lastError = `Network error reaching Gemini: ${retryErr?.message}`;
+        continue;
+      }
+    }
+
     if (!res.ok) {
       lastError = `Gemini returned ${res.status} for model ${model}: ${
         payload?.error?.message || "no detail"
@@ -155,8 +180,31 @@ export async function requestGeminiJson<T>(
       continue;
     }
 
-    const candidate = payload?.candidates?.[0];
-    const text = textOf(candidate);
+    let candidate = payload?.candidates?.[0];
+    let text = textOf(candidate);
+
+    // If grounding was active and returned an empty completion, retry without grounding
+    if (!text && isGrounded) {
+      isGrounded = false;
+      body = makeBody(false);
+      try {
+        const retryRes = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (retryRes.ok) {
+          const retryPayload = await retryRes.json().catch(() => null);
+          const retryCandidate = retryPayload?.candidates?.[0];
+          const retryText = textOf(retryCandidate);
+          if (retryText) {
+            candidate = retryCandidate;
+            text = retryText;
+          }
+        }
+      } catch {}
+    }
+
     if (!text) {
       const blocked = payload?.promptFeedback?.blockReason;
       lastError = blocked
@@ -177,7 +225,7 @@ export async function requestGeminiJson<T>(
         data: JSON.parse(jsonText) as T,
         model,
         sources: collectSources(candidate),
-        grounded: grounding,
+        grounded: isGrounded,
       };
     } catch (err: any) {
       return { ok: false, status: "parse_error", message: `Gemini returned invalid JSON: ${err?.message}` };

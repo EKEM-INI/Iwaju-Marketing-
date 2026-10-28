@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import type { ReplyIntelligence, PipelineStage, GroundedFact } from "@/types";
 import { failEnvelope, jsonEnvelope, okEnvelope, toLead, asStringArray } from "@/lib/agents";
-import { getChatGptKey, PRIMARY_KEY_NAME, requestChatGptJson } from "@/lib/chatgpt";
+import { getChatGptKey, PRIMARY_KEY_NAME } from "@/lib/chatgpt";
+import { getGeminiKey, PRIMARY_GEMINI_KEY_NAME } from "@/lib/gemini";
+import { writeWithFallback, providerLabel, hasAnyWriterKey } from "@/lib/outreach-writer";
 import { stripCitations } from "@/lib/outreach-facts";
 
 export const runtime = "nodejs";
@@ -99,10 +101,17 @@ interface ModelReply extends Partial<Omit<ReplyIntelligence, "suggestedReply" | 
 }
 
 export async function GET() {
+  const hasChatGpt = Boolean(getChatGptKey());
+  const hasGemini = Boolean(getGeminiKey());
   return NextResponse.json({
     status: "ok",
     agent: AGENT,
-    provider: getChatGptKey() ? "chatgpt + rules" : "rules",
+    hasApiKey: hasChatGpt || hasGemini,
+    writers: [
+      { provider: "chatgpt", envKey: PRIMARY_KEY_NAME, configured: hasChatGpt },
+      { provider: "gemini", envKey: PRIMARY_GEMINI_KEY_NAME, configured: hasGemini },
+    ],
+    provider: hasChatGpt ? "chatgpt + rules" : hasGemini ? "gemini + rules" : "rules",
     inboxConnected: false,
     writesRecords: false,
     note: "You paste the reply in. Nothing reads an inbox, and no reply is ever sent from here.",
@@ -132,13 +141,13 @@ export async function POST(req: Request) {
   const base = rulePass(reply);
   const lower = reply.toLowerCase();
 
-  if (!getChatGptKey()) {
+  if (!hasAnyWriterKey()) {
     return jsonEnvelope(
       okEnvelope<ReplyIntelligence>(
         AGENT,
         "rules",
         base,
-        `Read by pattern matching on the words in the reply itself — no model, no inbox access. Add ${PRIMARY_KEY_NAME} in Vercel to get intent reading and a drafted response. Nothing was written back to any record.`
+        `Read by pattern matching on the words in the reply itself — no model, no inbox access. Add ${PRIMARY_KEY_NAME} or ${PRIMARY_GEMINI_KEY_NAME} in Vercel to get intent reading and a drafted response. Nothing was written back to any record.`
       )
     );
   }
@@ -177,7 +186,7 @@ JSON only:
     1
   );
 
-  const answer = await requestChatGptJson<ModelReply>(systemPrompt, userPrompt, 0.2);
+  const answer = await writeWithFallback<ModelReply>(systemPrompt, userPrompt, 0.2);
 
   if (!answer.ok) {
     if (answer.status === "no_key") {
@@ -188,7 +197,7 @@ JSON only:
         AGENT,
         "rules",
         base,
-        `ChatGPT did not answer (${answer.message}). The reading below is the pattern-match version only.`
+        `AI did not answer (${answer.message}). The reading below is the pattern-match version only.`
       )
     );
   }
@@ -223,13 +232,15 @@ JSON only:
     suggestedStage: ["new", "contacted", "meeting", "closed"].includes(String(data.suggestedStage)) ? (data.suggestedStage as PipelineStage) : base.suggestedStage,
   };
 
+  const label = providerLabel(answer.modelProvider, answer.modelName);
+
   return jsonEnvelope(
     okEnvelope<ReplyIntelligence>(
       AGENT,
-      "chatgpt",
+      answer.modelProvider,
       result,
       [
-        "No inbox is connected: this reads text you pasted.",
+        `${label} analyzed the reply. No inbox is connected: this reads text you pasted.`,
         droppedQuotes > 0 ? `${droppedQuotes} quote(s) the model attributed to the reply were not found in it and were discarded.` : "Every quote the model used was found verbatim in the reply.",
         inventedFactUse.length > 0 ? `The draft cited facts that were never approved (${inventedFactUse.join(", ")}) — check the draft before using it.` : "The draft only cites facts you approved.",
       ].join(" ")
