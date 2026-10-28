@@ -10,9 +10,13 @@ import {
   failEnvelope,
   toLeads,
 } from "@/lib/agents";
-import { requestChatGptJson } from "@/lib/chatgpt";
+import { getChatGptKey, getChatGptModel, PRIMARY_KEY_NAME } from "@/lib/chatgpt";
+import { getGeminiKey, PRIMARY_GEMINI_KEY_NAME } from "@/lib/gemini";
+import { writeWithFallback, providerLabel, hasAnyWriterKey } from "@/lib/outreach-writer";
 import { decideChannel, type OutboundChannel } from "@/lib/consent";
 import { defaultSteps } from "@/lib/campaigns";
+
+export const runtime = "nodejs";
 
 const AGENT = "campaign-planner";
 
@@ -204,7 +208,7 @@ export async function POST(req: NextRequest) {
 
   const { plan, readyForModel } = buildPlan({ channel, purpose, leads, consent });
 
-  const model = await requestChatGptJson<{ steps: unknown }>(
+  const model = await writeWithFallback<{ steps: unknown }>(
     "You plan outbound B2B follow-up sequences for a small sales team. You never invent facts about a company, you never claim a metric, and you never propose a channel the permission check has blocked. You only re-word step intent and adjust spacing.",
     JSON.stringify(
       {
@@ -226,14 +230,15 @@ export async function POST(req: NextRequest) {
       null,
       2
     ),
-    0.3
+    0.3,
+    { maxOutputTokens: 3000 }
   );
 
   if (!model.ok) {
     const reason =
       model.status === "no_key"
-        ? "Rules-based plan only — no ChatGPT key, so nothing was re-worded."
-        : `Rules-based plan only — ChatGPT could not be reached (${model.message}).`;
+        ? `Rules-based plan only — neither ${PRIMARY_KEY_NAME} nor ${PRIMARY_GEMINI_KEY_NAME} is set in environment variables.`
+        : `Rules-based plan only — AI planner could not be reached (${model.message}).`;
     return jsonEnvelope(deterministicEnvelope(AGENT, plan, reason));
   }
 
@@ -244,27 +249,39 @@ export async function POST(req: NextRequest) {
       deterministicEnvelope(
         AGENT,
         { ...plan, steps: plan.steps },
-        "ChatGPT tried to move a step onto a different channel. Channel choice belongs to the permission check, so the rules plan was kept."
+        "AI planner tried to move a step onto a different channel. Channel choice belongs to the permission check, so the rules plan was kept."
       )
     );
   }
 
+  const label = providerLabel(model.modelProvider, model.modelName);
   return jsonEnvelope(
     okEnvelope(
       AGENT,
-      "chatgpt",
+      model.modelProvider,
       { ...plan, steps },
-      `ChatGPT re-wrote the step wording for "${purpose}". Spacing stayed inside the 0-30 day guard rail and no channel was changed.`
+      `${label} planned the sequence wording for "${purpose}". Spacing stayed inside the 0-30 day guard rail and no channel was changed.`
     )
   );
 }
 
 export async function GET() {
+  const hasChatGpt = Boolean(getChatGptKey());
+  const hasGemini = Boolean(getGeminiKey());
   return jsonEnvelope(
-    failEnvelope<CampaignPlan | null>(
+    okEnvelope(
       AGENT,
-      "no_key",
-      "POST a campaign purpose and the contacts you want sequenced. This agent only plans the order of work — it sends nothing."
+      "status",
+      {
+        hasApiKey: hasChatGpt || hasGemini,
+        engine: "Campaign Cadence & Sequence Planner",
+        writers: [
+          { provider: "chatgpt", envKey: PRIMARY_KEY_NAME, model: getChatGptModel(), configured: hasChatGpt },
+          { provider: "gemini", envKey: PRIMARY_GEMINI_KEY_NAME, configured: hasGemini },
+        ],
+        order: "ChatGPT first, Gemini fallback",
+      },
+      "POST a campaign purpose and contacts to plan an outbound sequence."
     )
   );
 }

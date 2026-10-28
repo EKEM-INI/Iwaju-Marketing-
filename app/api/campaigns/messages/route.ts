@@ -1,9 +1,13 @@
 import { NextRequest } from "next/server";
 import type { CampaignStep, Lead } from "@/types";
 import { badRequest, deterministicEnvelope, jsonEnvelope, okEnvelope, failEnvelope, toLead } from "@/lib/agents";
-import { requestChatGptJson } from "@/lib/chatgpt";
+import { getChatGptKey, getChatGptModel, PRIMARY_KEY_NAME } from "@/lib/chatgpt";
+import { getGeminiKey, PRIMARY_GEMINI_KEY_NAME } from "@/lib/gemini";
+import { writeWithFallback, providerLabel, hasAnyWriterKey } from "@/lib/outreach-writer";
 import { decideChannel, type OutboundChannel } from "@/lib/consent";
 import { stripCitations, type FactCandidate } from "@/lib/outreach-facts";
+
+export const runtime = "nodejs";
 
 const AGENT = "campaign-writer";
 
@@ -229,7 +233,7 @@ export async function POST(req: NextRequest) {
 
   const fallback = ruleDraft({ lead, step, facts, priors });
 
-  const model = await requestChatGptJson<{ subject?: string; body?: string; factIds?: unknown }>(
+  const model = await writeWithFallback<{ subject?: string; body?: string; factIds?: unknown }>(
     "You write short follow-up messages for a B2B sales team. You may only state facts from the approved list you are given. Anything you cannot source from that list must be written as a bracketed placeholder for the rep to fill in. You never invent company facts, numbers, dates, client names or awards. You never claim a metric. You always include a way out for the reader.",
     JSON.stringify(
       {
@@ -249,14 +253,15 @@ export async function POST(req: NextRequest) {
       null,
       2
     ),
-    0.4
+    0.4,
+    { maxOutputTokens: 2500 }
   );
 
   if (!model.ok) {
     const reason =
       model.status === "no_key"
-        ? "Skeleton draft only — no ChatGPT key, so this was assembled from the ticked facts and left with placeholders."
-        : `Skeleton draft only — ChatGPT could not be reached (${model.message}).`;
+        ? `Skeleton draft only — neither ${PRIMARY_KEY_NAME} nor ${PRIMARY_GEMINI_KEY_NAME} is set in environment variables.`
+        : `Skeleton draft only — AI writer could not be reached (${model.message}).`;
     return jsonEnvelope(
       deterministicEnvelope<DraftData>(
         AGENT,
@@ -316,10 +321,11 @@ export async function POST(req: NextRequest) {
     droppedClaims.push(`numbers not present in any ticked fact: ${Array.from(new Set(inventedNumbers)).slice(0, 6).join(", ")}`);
   }
 
+  const label = providerLabel(model.modelProvider, model.modelName);
   return jsonEnvelope(
     okEnvelope(
       AGENT,
-      "chatgpt",
+      model.modelProvider,
       {
         stepId: step.id,
         kind: step.kind,
@@ -334,17 +340,28 @@ export async function POST(req: NextRequest) {
         sent: false,
       },
       droppedClaims.length > 0
-        ? `Draft kept, but flagged: ${droppedClaims.join("; ")}. Nothing was sent.`
-        : "Draft written from ticked facts only. Nothing was sent — copy it out or hand it to your mail app yourself."
+        ? `Draft kept, but flagged: ${droppedClaims.join("; ")}. Written by ${label}. Nothing was sent.`
+        : `Draft written by ${label} from ticked facts only. Nothing was sent — copy it out or hand it to your mail app yourself.`
     )
   );
 }
 
 export async function GET() {
+  const hasChatGpt = Boolean(getChatGptKey());
+  const hasGemini = Boolean(getGeminiKey());
   return jsonEnvelope(
-    failEnvelope<DraftData | null>(
+    okEnvelope(
       AGENT,
-      "no_key",
+      "status",
+      {
+        hasApiKey: hasChatGpt || hasGemini,
+        engine: "Campaign Step Message Writer",
+        writers: [
+          { provider: "chatgpt", envKey: PRIMARY_KEY_NAME, model: getChatGptModel(), configured: hasChatGpt },
+          { provider: "gemini", envKey: PRIMARY_GEMINI_KEY_NAME, configured: hasGemini },
+        ],
+        order: "ChatGPT first, Gemini fallback",
+      },
       "POST a contact, a step and the facts you have ticked. This writes draft copy for a campaign step; it does not send anything."
     )
   );

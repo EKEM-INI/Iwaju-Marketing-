@@ -212,7 +212,7 @@ export function NewCampaignForm({ leads, consent, onLeadsSaved, onCreated, onCan
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-200 text-xs font-semibold border border-zinc-700"
             >
               <Wand2 className="w-3.5 h-3.5 text-emerald-400" />
-              <span>{planning ? "Planning..." : "Suggest spacing & wording"}</span>
+              <span>{planning ? "Planning with AI..." : "AI Sequence Planner"}</span>
             </button>
             <button type="button" onClick={addStep} className="px-2.5 py-2 rounded-lg text-xs text-zinc-400 hover:text-white border border-zinc-800">
               + step
