@@ -3,8 +3,9 @@
 import React, { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, Plus, LogOut, Mail, Cpu, Zap } from "lucide-react";
+import { Menu, Plus, LogOut, Mail, Cpu, Zap, AlertTriangle, Clock } from "lucide-react";
 import { getStoredLeads } from "@/lib/storage";
+import { auditLeadsSla } from "@/lib/sla";
 import { formatCurrency } from "@/lib/utils";
 import { useAuth } from "@/components/auth/AuthContext";
 
@@ -40,6 +41,7 @@ export function Header({ onMobileMenuToggle }: HeaderProps) {
   const { user, logout } = useAuth();
   const [leadCount, setLeadCount] = useState(0);
   const [pipelineTotal, setPipelineTotal] = useState(0);
+  const [slaBreaches, setSlaBreaches] = useState(0);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -48,6 +50,8 @@ export function Header({ onMobileMenuToggle }: HeaderProps) {
     setLeadCount(leads.length);
     const sum = leads.reduce((acc, l) => acc + (l.dealValue || 0), 0);
     setPipelineTotal(sum);
+    const report = auditLeadsSla(leads);
+    setSlaBreaches(report.breachedCount);
   };
 
   useEffect(() => {
@@ -105,6 +109,27 @@ export function Header({ onMobileMenuToggle }: HeaderProps) {
             <span className="font-medium text-foreground">{formatCurrency(pipelineTotal)}</span>
           </div>
         </div>
+
+        {/* SLA Status Indicator Pill */}
+        {slaBreaches > 0 ? (
+          <Link
+            href="/pipeline"
+            className="hidden items-center gap-1.5 rounded-md border border-red-500/40 bg-red-950/40 px-2.5 py-1 font-mono text-xs text-red-300 hover:bg-red-900/50 transition-colors lg:flex shadow-sm"
+            title="High-priority leads overdue for touch"
+          >
+            <AlertTriangle className="size-3 text-red-400 animate-pulse" />
+            <span className="font-semibold">{slaBreaches} Overdue SLA</span>
+          </Link>
+        ) : (
+          <Link
+            href="/pipeline"
+            className="hidden items-center gap-1.5 rounded-md border border-emerald-500/30 bg-emerald-950/20 px-2.5 py-1 font-mono text-[11px] text-emerald-400 hover:bg-emerald-900/30 transition-colors lg:flex"
+            title="All active leads within response SLA"
+          >
+            <Clock className="size-3 text-emerald-400" />
+            <span>SLA Healthy</span>
+          </Link>
+        )}
 
         {/* Quick launch */}
         <Link

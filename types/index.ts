@@ -530,3 +530,41 @@ export interface CampaignStats {
   measuredFrom: string;
   notMeasured: string[];
 }
+
+export type SlaStatus = "breached" | "approaching" | "healthy";
+
+export interface SlaItem {
+  leadId: string;
+  company: string;
+  name: string;
+  title: string;
+  email: string;
+  phone: string;
+  stage: PipelineStage;
+  dealValue: number;
+  currency: string;
+  score: number;
+  isHighPriority: boolean;
+  status: SlaStatus;
+  targetSlaHours: number;
+  elapsedHours: number;
+  overdueHours: number;
+  lastTouchTimestamp: string;
+  breachReason: string;
+  recommendedAction: string;
+  suggestedFollowUpSnippet?: string;
+}
+
+export interface SlaAuditReport {
+  timestamp: string;
+  totalEvaluated: number;
+  highPriorityCount: number;
+  breachedCount: number;
+  approachingCount: number;
+  healthyCount: number;
+  totalAtRiskDealValue: number;
+  currency: string;
+  items: SlaItem[];
+  emailAlertSent?: boolean;
+}
+

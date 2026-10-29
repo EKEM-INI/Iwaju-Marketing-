@@ -5,6 +5,7 @@ import { KanbanBoard } from "@/components/pipeline/KanbanBoard";
 import { AccountFitPanel } from "@/components/pipeline/AccountFitPanel";
 import { TrustPanel } from "@/components/pipeline/TrustPanel";
 import { AgentWorkbench } from "@/components/pipeline/AgentWorkbench";
+import { SlaReminderWidget } from "@/components/pipeline/SlaReminderWidget";
 import { EvidenceCounts, FitSignals } from "@/lib/icp";
 import {
   getStoredLeads,
@@ -94,6 +95,19 @@ export default function PipelinePage() {
     showToast("Lead Removed", "Lead successfully removed from pipeline.", "info");
   };
 
+  const handleMarkContacted = (leadId: string) => {
+    const updated = leads.map((l) =>
+      l.id === leadId
+        ? {
+            ...l,
+            lastContactedAt: new Date().toISOString(),
+          }
+        : l
+    );
+    setLeads(updated);
+    saveLeads(updated);
+  };
+
   const totalValue = leads.reduce((acc, l) => acc + (l.dealValue || 0), 0);
   const avgDealValue = leads.length > 0 ? Math.round(totalValue / leads.length) : 0;
   const closedCount = leads.filter((l) => l.stage === "closed").length;
@@ -161,6 +175,9 @@ export default function PipelinePage() {
           </div>
         </div>
       </div>
+
+      {/* Autonomous Follow-Up SLA Alert Banner */}
+      <SlaReminderWidget leads={leads} onMarkContacted={handleMarkContacted} />
 
       {/* Record trust: live verification evidence and reversible hygiene proposals */}
       <TrustPanel leads={leads} onEvidence={handleEvidence} onLeadsSaved={setLeads} />
