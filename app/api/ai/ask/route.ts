@@ -1,22 +1,27 @@
 import { NextResponse } from "next/server";
+import { getGeminiKey } from "@/lib/gemini";
+import { getChatGptKey, getChatGptModel } from "@/lib/chatgpt";
 
 export async function GET() {
-  const apiKey =
-    process.env.GEMINI_API_KEY ||
-    process.env.GOOGLE_API_KEY ||
-    process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+  const geminiKey = getGeminiKey();
+  const chatGptKey = getChatGptKey();
+  const hasApiKey = Boolean(geminiKey || chatGptKey);
 
   return NextResponse.json({
     status: "ok",
-    hasApiKey: Boolean(apiKey && apiKey.trim().length > 0),
-    model: "gemini-3.8-flash",
+    hasApiKey,
+    providers: [
+      { provider: "gemini", configured: Boolean(geminiKey) },
+      { provider: "chatgpt", configured: Boolean(chatGptKey) },
+    ],
+    model: geminiKey ? "gemini-3.8-flash" : chatGptKey ? getChatGptModel() : "none",
   });
 }
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { message, history, apiKey: clientApiKey } = body;
+    const { message, apiKey: clientApiKey } = body;
 
     if (!message || typeof message !== "string") {
       return NextResponse.json(
@@ -26,23 +31,22 @@ export async function POST(req: Request) {
     }
 
     const headerApiKey = req.headers.get("x-gemini-api-key");
-    const apiKey =
+    const geminiKey =
       (clientApiKey && clientApiKey.trim()) ||
       (headerApiKey && headerApiKey.trim()) ||
-      process.env.GEMINI_API_KEY ||
-      process.env.GOOGLE_API_KEY ||
-      process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+      getGeminiKey();
+    const chatGptKey = getChatGptKey();
 
-    if (!apiKey || apiKey.trim().length === 0) {
+    if (!geminiKey && !chatGptKey) {
       return NextResponse.json({
-        answer: "⚠️ **Gemini API Key Missing:** No `GEMINI_API_KEY` was detected in your Vercel Environment Variables. Please make sure you added `GEMINI_API_KEY` under your Vercel Project Settings → Environment Variables and redeployed your application.",
+        answer: "⚠️ **AI API Key Missing:** Neither `GEMINI_API_KEY` nor `OPENAI_API_KEY` was detected in your Vercel Environment Variables. Please make sure you added your key under Vercel Project Settings → Environment Variables and redeployed your application.",
         provider: "Configuration Error",
         isLiveGemini: false,
       });
     }
 
     const systemPrompt = `You are "Iwaju AI Copilot", the intelligent outbound sales and platform copilot for Iwaju Marketing OS.
-You are directly connected to Google Gemini to provide authentic, highly contextual, intelligent responses.
+You provide authentic, highly contextual, intelligent responses.
 
 PLATFORM CONTEXT:
 1. Executive Command Center: Live KPI metrics for leads, deals in NGN (₦) and USD ($), funnel velocity, and lead scoring.
@@ -57,62 +61,110 @@ INSTRUCTIONS:
 - When asked to draft sales pitches, cold emails, or value propositions, generate tailored, high-converting copy.
 - Never give generic stock answers. Reason through the client's specific question.`;
 
-    const modelsToTry = ["gemini-3.8-flash", "gemini-flash-latest"];
     let lastError: any = null;
 
-    for (const modelName of modelsToTry) {
+    // 1. Try Gemini with 4-tier model cascading
+    if (geminiKey) {
+      const modelsToTry = [
+        "gemini-3.8-flash",
+        "gemini-flash-latest",
+        "gemini-flash-lite-latest",
+        "gemini-2.5-flash-lite",
+      ];
+
+      for (const modelName of modelsToTry) {
+        try {
+          const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiKey.trim()}`;
+
+          const contents = [
+            {
+              role: "user",
+              parts: [{ text: `${systemPrompt}\n\nClient Question: ${message}` }],
+            },
+          ];
+
+          const geminiRes = await fetch(geminiEndpoint, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              contents,
+              generationConfig: {
+                temperature: 0.7,
+                maxOutputTokens: 2048,
+              },
+            }),
+          });
+
+          const geminiData = await geminiRes.json();
+
+          if (geminiRes.ok) {
+            const generatedText =
+              geminiData?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+            if (generatedText) {
+              return NextResponse.json({
+                answer: generatedText,
+                provider: `Google Gemini (${modelName})`,
+                isLiveGemini: true,
+                model: modelName,
+              });
+            }
+          } else {
+            lastError =
+              geminiData?.error?.message ||
+              `Model ${modelName} returned status ${geminiRes.status}`;
+          }
+        } catch (err: any) {
+          lastError = err.message;
+        }
+      }
+    }
+
+    // 2. Fallback to ChatGPT if OpenAI key is present
+    if (chatGptKey) {
       try {
-        const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey.trim()}`;
-
-        // Build request payload
-        const contents: any[] = [];
-
-        // Grounding instruction
-        contents.push({
-          role: "user",
-          parts: [{ text: `${systemPrompt}\n\nClient Question: ${message}` }],
-        });
-
-        const geminiRes = await fetch(geminiEndpoint, {
+        const model = getChatGptModel();
+        const openAiRes = await fetch("https://api.openai.com/v1/chat/completions", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            Authorization: `Bearer ${chatGptKey}`,
           },
           body: JSON.stringify({
-            contents,
-            generationConfig: {
-              temperature: 0.7,
-              maxOutputTokens: 2048,
-            },
+            model,
+            temperature: 0.7,
+            max_tokens: 2048,
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: message },
+            ],
           }),
         });
 
-        const geminiData = await geminiRes.json();
-
-        if (geminiRes.ok) {
-          const generatedText =
-            geminiData?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-          if (generatedText) {
+        const openAiData = await openAiRes.json();
+        if (openAiRes.ok) {
+          const answer = openAiData?.choices?.[0]?.message?.content;
+          if (answer) {
             return NextResponse.json({
-              answer: generatedText,
-              provider: `Google Gemini (${modelName})`,
-              isLiveGemini: true,
-              model: modelName,
+              answer,
+              provider: `ChatGPT (${model})`,
+              isLiveGemini: false,
+              model,
             });
           }
         } else {
-          lastError = geminiData?.error?.message || `Model ${modelName} returned status ${geminiRes.status}`;
-          console.warn(`Gemini call to ${modelName} failed:`, geminiData);
+          lastError = openAiData?.error?.message || `OpenAI returned status ${openAiRes.status}`;
         }
-      } catch (err: any) {
-        lastError = err.message;
+      } catch (openAiErr: any) {
+        lastError = openAiErr.message;
       }
     }
 
     return NextResponse.json({
-      answer: `⚠️ **Gemini API Error:** ${lastError || "Failed to reach Google Gemini API"}.\n\nPlease ensure your \`GEMINI_API_KEY\` in Vercel is active and has access to Google Gemini in Google AI Studio.`,
-      provider: "Gemini Error",
+      answer: `⚠️ **AI Copilot Error:** ${lastError || "Failed to reach Google Gemini and OpenAI APIs"}.\n\nPlease ensure your API keys in Vercel are active.`,
+      provider: "AI Provider Error",
       isLiveGemini: false,
       error: lastError,
     });
